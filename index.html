@@ -147,6 +147,26 @@
             border-left: 4px solid #3c3;
         }
 
+        .info {
+            background: #eef;
+            color: #339;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #339;
+        }
+
+        textarea {
+            width: 100%;
+            height: 80px;
+            padding: 10px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: monospace;
+            margin-top: 10px;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -184,72 +204,54 @@
                 font-size: 12px;
             }
         }
-        
-        @media (max-width: 480px) {
-            .container {
-                padding: 15px;
-            }
-            
-            h1 {
-                font-size: 1.5em;
-            }
-            
-            .section {
-                margin-bottom: 20px;
-            }
-            
-            .input-group input {
-                padding: 10px;
-                font-size: 12px;
-            }
-            
-            .video-container {
-                padding: 8px;
-                min-height: 150px;
-            }
-            
-            .control-buttons {
-                gap: 3px;
-            }
-            
-            button {
-                padding: 8px 12px;
-                font-size: 11px;
-            }
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🖥️ Escritorio Remoto - WebRTC</h1>
         
-        <div class="section">
-            <h2>Compartir tu pantalla/cámara</h2>
-            <p>1. Haz clic para compartir tu pantalla</p>
-            <p>2. Copia la OFERTA generada y envíala al espectador</p>
-            <p>3. Pega aquí la RESPUESTA del espectador</p>
+        <div id="roleSelection" class="section">
+            <h2>¿Qué quieres hacer?</h2>
             <div class="input-group">
-                <input type="text" id="roomName" placeholder="Nombre de la sala (opcional)">
+                <button onclick="selectRole('sharer')" style="flex: 1;">🖥️ Compartir pantalla/cámara</button>
+                <button onclick="selectRole('viewer')" style="flex: 1;">👁️ Ver pantalla remota</button>
+            </div>
+        </div>
+
+        <div id="sharerSection" class="section" style="display: none;">
+            <h2>Compartir tu pantalla/cámara</h2>
+            <p>1. Ingresa tu nombre</p>
+            <p>2. Haz clic para compartir</p>
+            <p>3. Comparte el ID de la sala con otros</p>
+            <div class="input-group">
+                <input type="text" id="sharername" placeholder="Tu nombre">
                 <button onclick="startScreenShare()" id="shareBtn">Compartir pantalla</button>
             </div>
-            <textarea id="viewerAnswer" placeholder="Pega aquí la respuesta del espectador" style="width: 100%; height: 80px; padding: 10px; border: 2px solid #e1e1e1; border-radius: 8px; font-size: 12px; font-family: monospace; margin-top: 10px; display: none;"></textarea>
-            <button onclick="receiveAnswer()" id="receiveAnswerBtn" style="margin-top: 10px; display: none;">Conectar respuesta</button>
             <div id="shareStatus" class="status"></div>
             <div id="mobileInfo" style="display: none; background: #fff3cd; padding: 10px; border-radius: 8px; margin-top: 10px;">
                 <strong>📱 Consejo para móviles:</strong> Usa la cámara trasera para mejor calidad. Asegúrate de tener buena iluminación.
             </div>
+            <button onclick="backToRole()" style="margin-top: 20px; background: #999;">← Volver</button>
         </div>
 
-        <div class="section">
+        <div id="viewerSection" class="section" style="display: none;">
             <h2>Ver pantalla remota</h2>
-            <p>1. Comparte tu pantalla primero y copia la OFERTA</p>
-            <p>2. Pega aquí la OFERTA recibida</p>
-            <textarea id="remoteOffer" placeholder="Pega aquí la oferta (JSON)" style="width: 100%; height: 100px; padding: 10px; border: 2px solid #e1e1e1; border-radius: 8px; font-size: 12px; font-family: monospace;"></textarea>
-            <button onclick="setupViewer()" style="margin-top: 10px;">Conectar como espectador</button>
+            <p>1. Ingresa tu nombre</p>
+            <p>2. Ingresa el ID de la sala</p>
+            <p>3. Conecta automáticamente</p>
+            <div class="input-group">
+                <input type="text" id="viewerName" placeholder="Tu nombre">
+                <input type="text" id="roomId" placeholder="ID de la sala (ej: ROOM123ABC)">
+                <button onclick="connectAsViewer()" id="connectBtn">Conectar</button>
+            </div>
             <div id="joinStatus" class="status"></div>
+            <button onclick="backToRole()" style="margin-top: 20px; background: #999;">← Volver</button>
         </div>
 
         <div class="video-container" id="videoContainer">
+            <div id="sharerInfo" style="display: none; position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.7); color: white; padding: 12px 20px; border-radius: 8px; z-index: 10; font-weight: bold;">
+                🎤 Compartiendo: <span id="sharerName">-</span>
+            </div>
             <video id="remoteVideo" autoplay playsinline></video>
             <div id="localVideoContainer" style="display: none;">
                 <video id="localVideo" autoplay playsinline muted></video>
@@ -257,7 +259,8 @@
         </div>
 
         <div id="connectionInfo" class="connection-info" style="display: none;">
-            <strong>ID de sala:</strong> <span id="currentRoomId"></span>
+            <strong>📌 ID de sala:</strong> <span id="currentRoomId" style="font-family: monospace; cursor: pointer;" onclick="copyRoomId()"></span>
+            <small style="display: block; margin-top: 8px; cursor: pointer; color: #667eea;" onclick="copyRoomId()">Haz clic para copiar</small>
         </div>
 
         <div id="messages"></div>
@@ -271,10 +274,12 @@
 
     <script>
         let localStream = null;
-        let peerConnection = null;
-        let roomId = null;
+        let sharerPeerConnection = null;
+        let viewerPeerConnection = null;
+        let currentRoomId = null;
         let isAudioEnabled = true;
         let isVideoEnabled = true;
+        let currentRole = null;
 
         const configuration = {
             iceServers: [
@@ -284,10 +289,8 @@
             sdpSemantics: 'unified-plan'
         };
 
-        // Detectar si es dispositivo móvil
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
-        // Configuración para móviles
         const mobileConfig = {
             video: {
                 width: { ideal: 480 },
@@ -301,11 +304,58 @@
             }
         };
 
+        // Generar ID de sala aleatorio
+        function generateRoomId() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let result = 'ROOM';
+            for (let i = 0; i < 8; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // Copiar ID de sala al portapapeles
+        function copyRoomId() {
+            if (currentRoomId) {
+                navigator.clipboard.writeText(currentRoomId);
+                showMessage('✅ ID de sala copiado al portapapeles', 'success');
+            }
+        }
+
+        // Seleccionar rol
+        function selectRole(role) {
+            currentRole = role;
+            document.getElementById('roleSelection').style.display = 'none';
+            
+            if (role === 'sharer') {
+                document.getElementById('sharerSection').style.display = 'block';
+                if (isMobile) {
+                    document.getElementById('mobileInfo').style.display = 'block';
+                }
+            } else {
+                document.getElementById('viewerSection').style.display = 'block';
+            }
+        }
+
+        // Volver al inicio
+        function backToRole() {
+            currentRole = null;
+            document.getElementById('roleSelection').style.display = 'block';
+            document.getElementById('sharerSection').style.display = 'none';
+            document.getElementById('viewerSection').style.display = 'none';
+            stopSharing();
+        }
+
+        // Compartir pantalla
         async function startScreenShare() {
             try {
-                const roomName = document.getElementById('roomName').value || 'sala-' + Math.random().toString(36).substr(2, 5).toUpperCase();
-                
-                // Verificar si es móvil
+                const userName = document.getElementById('sharername').value.trim();
+                if (!userName) {
+                    showMessage('⚠️ Por favor ingresa tu nombre', 'error');
+                    return;
+                }
+
+                // Obtener stream
                 if (isMobile) {
                     localStream = await navigator.mediaDevices.getUserMedia({
                         video: mobileConfig.video,
@@ -326,60 +376,52 @@
                 localVideo.srcObject = localStream;
                 document.getElementById('localVideoContainer').style.display = 'block';
 
-                // Crear conexión WebRTC
-                peerConnection = new RTCPeerConnection(configuration);
+                // Crear peer connection para compartidor
+                sharerPeerConnection = new RTCPeerConnection(configuration);
                 
-                // Manejar candidatos ICE
-                peerConnection.addEventListener('icecandidate', (event) => {
-                    console.log('ICE candidate:', event.candidate);
-                });
-                
-                // Añadir stream local
-                localStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, localStream);
+                sharerPeerConnection.addEventListener('signalingstatechange', () => {
+                    console.log('[COMPARTIDOR] signalingState:', sharerPeerConnection.signalingState);
                 });
 
-                // Manejar conexiones
-                peerConnection.addEventListener('connectionstatechange', () => {
-                    console.log('Estado de conexión:', peerConnection.connectionState);
+                sharerPeerConnection.addEventListener('connectionstatechange', () => {
+                    console.log('[COMPARTIDOR] connectionState:', sharerPeerConnection.connectionState);
+                });
+                
+                localStream.getTracks().forEach(track => {
+                    sharerPeerConnection.addTrack(track, localStream);
                 });
 
                 // Crear oferta
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
+                const offer = await sharerPeerConnection.createOffer();
+                await sharerPeerConnection.setLocalDescription(offer);
 
-                // Generar ID de sala
-                roomId = roomName || 'sala-' + Math.random().toString(36).substr(2, 5).toUpperCase();
-                document.getElementById('currentRoomId').textContent = roomId;
+                currentRoomId = generateRoomId();
+                
+                // Guardar datos de la sala en localStorage
+                const roomData = {
+                    roomId: currentRoomId,
+                    sharerName: userName,
+                    offer: sharerPeerConnection.localDescription,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(`webrtc_room_${currentRoomId}`, JSON.stringify(roomData));
+                localStorage.setItem('webrtc_current_sharer', JSON.stringify(roomData));
+                
+                document.getElementById('currentRoomId').textContent = currentRoomId;
                 document.getElementById('connectionInfo').style.display = 'block';
                 document.getElementById('controlButtons').style.display = 'flex';
                 
-                // Mostrar mensaje de éxito
-                showMessage(`🌐 Compartiendo en la sala: ${roomId}`, 'success');
+                showMessage(`✅ Sala creada: ${currentRoomId}`, 'success');
+                showMessage('👥 Comparte este ID con otros para que se conecten', 'info');
                 
-                // Mostrar oferta para copiar
-                const offerJSON = JSON.stringify(peerConnection.localDescription);
-                showMessage('📋 OFERTA generada. Comparte esta con el espectador:', 'info');
-                
-                // Mostrar campo para recibir respuesta
-                document.getElementById('viewerAnswer').style.display = 'block';
-                document.getElementById('receiveAnswerBtn').style.display = 'block';
-                
-                const offerDiv = document.createElement('div');
-                offerDiv.style.cssText = 'background: #f0f0f0; padding: 10px; border-radius: 8px; margin: 10px 0; word-break: break-all; font-size: 11px; font-family: monospace; max-height: 150px; overflow-y: auto; cursor: pointer;';
-                offerDiv.textContent = offerJSON;
-                offerDiv.title = 'Click para copiar';
-                offerDiv.onclick = () => {
-                    navigator.clipboard.writeText(offerJSON);
-                    showMessage('✅ Oferta copiada al portapapeles', 'success');
-                };
-                document.getElementById('messages').appendChild(offerDiv);
-                
-                // Actualizar botones
                 document.getElementById('shareBtn').textContent = 'Compartiendo...';
                 document.getElementById('shareBtn').disabled = true;
+                document.getElementById('sharername').disabled = true;
 
-                console.log('Compartiendo en sala:', roomId);
+                // Escuchar respuestas del espectador
+                listenForViewerResponse(currentRoomId);
+                
+                console.log('Compartiendo en sala:', currentRoomId);
                 
             } catch (error) {
                 console.error('Error al compartir:', error);
@@ -392,27 +434,67 @@
             }
         }
 
-        async function setupViewer() {
+        // Escuchar respuesta del espectador
+        function listenForViewerResponse(roomId) {
+            const checkInterval = setInterval(() => {
+                const roomData = localStorage.getItem(`webrtc_room_${roomId}`);
+                if (roomData) {
+                    const data = JSON.parse(roomData);
+                    if (data.answer && sharerPeerConnection) {
+                        clearInterval(checkInterval);
+                        try {
+                            sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                            showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
+                            console.log('Espectador conectado');
+                        } catch (error) {
+                            console.error('Error al establecer respuesta:', error);
+                        }
+                    }
+                }
+            }, 500);
+
+            // Limpiar después de 5 minutos
+            setTimeout(() => clearInterval(checkInterval), 300000);
+        }
+
+        // Conectar como espectador
+        async function connectAsViewer() {
             try {
-                const offerText = document.getElementById('remoteOffer').value.trim();
+                const viewerName = document.getElementById('viewerName').value.trim();
+                const roomId = document.getElementById('roomId').value.trim().toUpperCase();
                 
-                if (!offerText) {
-                    showMessage('⚠️ Por favor, pega la oferta del compartidor', 'error');
+                if (!viewerName) {
+                    showMessage('⚠️ Por favor ingresa tu nombre', 'error');
+                    return;
+                }
+                
+                if (!roomId) {
+                    showMessage('⚠️ Por favor ingresa el ID de la sala', 'error');
                     return;
                 }
 
-                const remoteOffer = JSON.parse(offerText);
+                // Obtener datos de la sala
+                const roomDataStr = localStorage.getItem(`webrtc_room_${roomId}`);
+                if (!roomDataStr) {
+                    showMessage(`❌ No se encontró la sala: ${roomId}`, 'error');
+                    return;
+                }
 
-                // Crear conexión WebRTC
-                peerConnection = new RTCPeerConnection(configuration);
+                const roomData = JSON.parse(roomDataStr);
+                const remoteOffer = roomData.offer;
+
+                // Mostrar nombre del compartidor
+                document.getElementById('sharerName').textContent = roomData.sharerName;
+                document.getElementById('sharerInfo').style.display = 'block';
+
+                // Crear peer connection para espectador
+                viewerPeerConnection = new RTCPeerConnection(configuration);
                 
-                // Manejar candidatos ICE
-                peerConnection.addEventListener('icecandidate', (event) => {
-                    console.log('ICE candidate:', event.candidate);
+                viewerPeerConnection.addEventListener('signalingstatechange', () => {
+                    console.log('[ESPECTADOR] signalingState:', viewerPeerConnection.signalingState);
                 });
-                
-                // Manejar stream remoto
-                peerConnection.addEventListener('track', (event) => {
+
+                viewerPeerConnection.addEventListener('track', (event) => {
                     console.log('Track remoto recibido:', event.track.kind);
                     const remoteVideo = document.getElementById('remoteVideo');
                     if (remoteVideo.srcObject) {
@@ -422,65 +504,31 @@
                     }
                 });
 
-                // Establecer descripción remota
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+                viewerPeerConnection.addEventListener('connectionstatechange', () => {
+                    console.log('[ESPECTADOR] connectionState:', viewerPeerConnection.connectionState);
+                });
+
+                // Establecer oferta remota
+                await viewerPeerConnection.setRemoteDescription(new RTCSessionDescription(remoteOffer));
 
                 // Crear respuesta
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
+                const answer = await viewerPeerConnection.createAnswer();
+                await viewerPeerConnection.setLocalDescription(answer);
 
-                // Mostrar respuesta para copiar
-                const answerJSON = JSON.stringify(peerConnection.localDescription);
-                showMessage('📋 RESPUESTA generada. Comparte esta con el compartidor:', 'success');
+                // Guardar respuesta en localStorage
+                roomData.answer = viewerPeerConnection.localDescription;
+                localStorage.setItem(`webrtc_room_${roomId}`, JSON.stringify(roomData));
                 
-                const answerDiv = document.createElement('div');
-                answerDiv.style.cssText = 'background: #f0f0f0; padding: 10px; border-radius: 8px; margin: 10px 0; word-break: break-all; font-size: 11px; font-family: monospace; max-height: 150px; overflow-y: auto; cursor: pointer;';
-                answerDiv.textContent = answerJSON;
-                answerDiv.title = 'Click para copiar';
-                answerDiv.onclick = () => {
-                    navigator.clipboard.writeText(answerJSON);
-                    showMessage('✅ Respuesta copiada al portapapeles', 'success');
-                };
-                document.getElementById('messages').appendChild(answerDiv);
+                currentRoomId = roomId;
+                showMessage('✅ ¡Conectado! Recibiendo transmisión...', 'success');
+                console.log('Espectador conectado a sala:', roomId);
                 
-                // Actualizar UI
-                document.getElementById('joinBtn').textContent = 'Conectando...';
-                document.getElementById('joinBtn').disabled = true;
-                document.getElementById('shareBtn').disabled = true;
-
-                console.log('Espectador listo para conectar');
-                showMessage('⏳ Esperando a que el compartidor pegue la respuesta...', 'info');
+                document.getElementById('viewerName').disabled = true;
+                document.getElementById('roomId').disabled = true;
+                document.getElementById('connectBtn').disabled = true;
                 
             } catch (error) {
-                console.error('Error al procesar oferta:', error);
-                showMessage(`❌ Error: ${error.message}`, 'error');
-            }
-        }
-
-        async function receiveAnswer() {
-            try {
-                if (!peerConnection) {
-                    showMessage('⚠️ Primero debes compartir la pantalla', 'error');
-                    return;
-                }
-
-                const answerText = document.getElementById('viewerAnswer').value.trim();
-                
-                if (!answerText) {
-                    showMessage('⚠️ Por favor, pega la respuesta del espectador', 'error');
-                    return;
-                }
-
-                const remoteAnswer = JSON.parse(answerText);
-
-                // Establecer descripción remota
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(remoteAnswer));
-
-                showMessage('✅ ¡Conexión establecida! Video transmitiendo...', 'success');
-                console.log('Conexión WebRTC establecida exitosamente');
-                
-            } catch (error) {
-                console.error('Error al recibir respuesta:', error);
+                console.error('Error al conectar:', error);
                 showMessage(`❌ Error: ${error.message}`, 'error');
             }
         }
@@ -502,9 +550,14 @@
         }
 
         function stopSharing() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
+            if (sharerPeerConnection) {
+                sharerPeerConnection.close();
+                sharerPeerConnection = null;
+            }
+            
+            if (viewerPeerConnection) {
+                viewerPeerConnection.close();
+                viewerPeerConnection = null;
             }
             
             if (localStream) {
@@ -512,14 +565,20 @@
                 localStream = null;
             }
             
-            // Resetear UI
+            // Limpiar localStorage
+            if (currentRoomId) {
+                localStorage.removeItem(`webrtc_room_${currentRoomId}`);
+            }
+            
             document.getElementById('shareBtn').textContent = 'Compartir pantalla';
             document.getElementById('shareBtn').disabled = false;
-            document.getElementById('joinBtn').disabled = false;
+            document.getElementById('sharername').disabled = false;
             document.getElementById('controlButtons').style.display = 'none';
             document.getElementById('localVideoContainer').style.display = 'none';
             document.getElementById('connectionInfo').style.display = 'none';
+            document.getElementById('sharerInfo').style.display = 'none';
             
+            backToRole();
             showMessage('🔌 Compartición detenida', 'success');
             console.log('Compartición detenida');
         }
@@ -531,41 +590,21 @@
             messageDiv.textContent = message;
             messagesDiv.appendChild(messageDiv);
             
-            // Eliminar mensaj después de 5 segundos
             setTimeout(() => {
                 messageDiv.remove();
             }, 5000);
-        } 
+        }
 
-        // Verificar soporte de WebRTC
+        // Verificaciones iniciales
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             showMessage('❌ Tu navegador no soporta WebRTC', 'error');
             document.getElementById('shareBtn').disabled = true;
-            document.getElementById('joinBtn').disabled = true;
         }
 
-        // Verificar soporte de getDisplayMedia
         if (!navigator.mediaDevices.getDisplayMedia && !isMobile) {
-            showMessage('⚠️ La compartición de pantalla no está disponible en este navegador', 'error');
-            document.getElementById('shareBtn').textContent = 'Compartir cámara';
+            showMessage('⚠️ La compartición de pantalla no está disponible', 'error');
         }
 
-        // Mostrar info móvil si es necesario
-        if (isMobile) {
-            document.getElementById('mobileInfo').style.display = 'block';
-            showMessage('📱 Modo móvil: se usará cámara', 'info');
-        }
-
-        // Detectar navegador
-        const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
-        const isEdge = /Edg/.test(navigator.userAgent);
-        const isFirefox = /Firefox/.test(navigator.userAgent);
-        
-        if (!isChrome && !isEdge && !isMobile) {
-            showMessage('⚠️ Para mejor experiencia, usa Chrome o Edge', 'info');
-        }
-
-        // Inicializar
         console.log('Aplicación de escritorio remoto iniciada');
         console.log('Modo:', isMobile ? 'Móvil' : 'Escritorio');
     </script>
