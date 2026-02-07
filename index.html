@@ -298,9 +298,9 @@ const configuration = {
             }
         };
 
-        async function startScreenShare() {
+async function startScreenShare() {
             try {
-                const roomName = document.getElementById('roomName').value || 'sala-' + Date.now();
+                const roomName = document.getElementById('roomName').value || 'sala-' + Math.random().toString(36).substr(2, 5).toUpperCase();
                 
                 // Verificar si es móvil
                 if (isMobile) {
@@ -313,6 +313,9 @@ const configuration = {
                     showMessage('📱 Compartiendo cámara en móvil', 'success');
                 } else {
                     // Para escritorio, usar compartición de pantalla
+                    // Mostrar instrucciones antes de pedir permiso
+                    showMessage('🖥️ Selecciona la pantalla a compartir y haz clic en "Compartir"\n\n\u26a0\ufe0f Si no aparece la ventana, revisa los permisos del navegador.', 'info');
+                    
                     localStream = await navigator.mediaDevices.getDisplayMedia({ 
                         video: true, 
                         audio: false 
@@ -669,6 +672,20 @@ const configuration = {
                 .catch(error => {
                     showMessage('⚠️ No se puede acceder a la pantalla. Revisa los permisos del navegador.', 'error');
                     document.getElementById('shareBtn').disabled = true;
+                    
+                    // Mostrar ayuda detallada
+                    const helpDiv = document.createElement('div');
+                    helpDiv.className = 'error';
+                    helpDiv.innerHTML = `
+                        <p>\ud83d\udea8 Solución:</p>
+                        <ol>
+                            <li>Usa <strong>Chrome</strong> o <strong>Edge</strong></li>
+                            <li>Ve a <strong>chrome://settings/privacy</strong></li>
+                            <li>Activa <strong>"Allow sites to ask for access to screen"</strong></li>
+                            <li>Reinicia el navegador</li>
+                        </ol>
+                    `;
+                    document.getElementById('messages').appendChild(helpDiv);
                 });
         }
 
@@ -685,12 +702,38 @@ const configuration = {
             showMessage('⚠️ Safari en móvil tiene limitaciones - se usará cámara', 'info');
         }
         
-        // Verificar si es Chrome/Edge (mejor soporte)
+// Verificar si es Chrome/Edge (mejor soporte)
         const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
         const isEdge = /Edg/.test(navigator.userAgent);
+        const isFirefox = /Firefox/.test(navigator.userAgent);
         
         if (!isChrome && !isEdge && !isMobile) {
             showMessage('⚠️ Para mejor experiencia, usa Chrome o Edge en escritorio', 'info');
+            
+            // Mostrar ayuda adicional
+            const browserHelp = document.createElement('div');
+            browserHelp.className = 'error';
+            browserHelp.innerHTML = `
+                <p>🚨 Descarga Chrome:</p>
+                <a href='https://www.google.com/chrome/' target='_blank' style='color: white; text-decoration: underline;'>https://www.google.com/chrome/</a>
+                
+                <p>⚠️ Firefox: Puede requerir configuración adicional</p><div>
+            `;
+            document.getElementById('messages').appendChild(browserHelp);
+        }
+        
+        // Verificar si es Firefox (puede necesitar configuración)
+        if (isFirefox && !isMobile) {
+            const firefoxHelp = document.createElement('div');
+            firefoxHelp.className = 'error';
+            firefoxHelp.innerHTML = `
+                <p>⚠️ Firefox: Activa screen sharing en about:config</p><div>
+                <ol>
+                    <li>t media.getusermedia.screensharing.enabled = true</li>
+                    <li> media.getusermedia.screensharing.allowed_domains = *</li>
+                </ol><div>
+            `;
+            document.getElementById('messages').appendChild(firefoxHelp);
         }
 
         // Verificar soporte de getDisplayMedia
