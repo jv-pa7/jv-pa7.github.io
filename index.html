@@ -456,11 +456,11 @@
             messageDiv.textContent = message;
             messagesDiv.appendChild(messageDiv);
             
-            // Eliminar mensaje después de 5 segundos
+            // Eliminar mensaj después de 5 segundos
             setTimeout(() => {
                 messageDiv.remove();
             }, 5000);
-        }
+        } 
 
         // Verificar soporte de WebRTC
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
