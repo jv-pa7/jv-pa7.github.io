@@ -273,7 +273,7 @@
         let isAudioEnabled = true;
         let isVideoEnabled = true;
 
-const configuration = {
+        const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' }
@@ -298,29 +298,23 @@ const configuration = {
             }
         };
 
-async function startScreenShare() {
+        async function startScreenShare() {
             try {
                 const roomName = document.getElementById('roomName').value || 'sala-' + Math.random().toString(36).substr(2, 5).toUpperCase();
                 
                 // Verificar si es móvil
                 if (isMobile) {
-                    // Para móviles, usar cámara en lugar de pantalla (getDisplayMedia no está disponible en móviles)
                     localStream = await navigator.mediaDevices.getUserMedia({
                         video: mobileConfig.video,
                         audio: mobileConfig.audio
                     });
-                    
                     showMessage('📱 Compartiendo cámara en móvil', 'success');
                 } else {
-                    // Para escritorio, usar compartición de pantalla
-                    // Mostrar instrucciones antes de pedir permiso
-                    showMessage('🖥️ Selecciona la pantalla a compartir y haz clic en "Compartir"\n\n\u26a0\ufe0f Si no aparece la ventana, revisa los permisos del navegador.', 'info');
-                    
+                    showMessage('🖥️ Selecciona la pantalla a compartir y haz clic en "Compartir"', 'info');
                     localStream = await navigator.mediaDevices.getDisplayMedia({ 
                         video: true, 
                         audio: false 
                     });
-                    
                     showMessage('🖥️ Compartiendo pantalla', 'success');
                 }
 
@@ -346,14 +340,14 @@ async function startScreenShare() {
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
 
-                // Generar ID de sala más corto
+                // Generar ID de sala
                 roomId = roomName || 'sala-' + Math.random().toString(36).substr(2, 5).toUpperCase();
                 document.getElementById('currentRoomId').textContent = roomId;
                 document.getElementById('connectionInfo').style.display = 'block';
                 document.getElementById('controlButtons').style.display = 'flex';
                 
                 // Mostrar mensaje de éxito
-                showMessage(`\ud83c\udf10 Compartiendo en la sala: ${roomId}`, 'success');
+                showMessage(`🌐 Compartiendo en la sala: ${roomId}`, 'success');
                 
                 // Actualizar botones
                 document.getElementById('shareBtn').textContent = 'Compartiendo...';
@@ -364,181 +358,12 @@ async function startScreenShare() {
                 
             } catch (error) {
                 console.error('Error al compartir:', error);
-                showMessage(`\u274c Error: ${error.message}`, 'error');
+                showMessage(`❌ Error: ${error.message}`, 'error');
                 
                 if (localStream) {
                     localStream.getTracks().forEach(track => track.stop());
                     localStream = null;
                 }
-            }
-        }
-
-        async function joinRoom() {
-            roomId = document.getElementById('roomId').value.trim();
-            
-            if (!roomId) {
-                showMessage('\u26a0\ufe0f Por favor, introduce un ID de sala', 'error');
-                return;
-            }
-
-            try {
-                // Crear conexión WebRTC
-                peerConnection = new RTCPeerConnection(configuration);
-                
-                // Manejar stream remoto
-                peerConnection.addEventListener('track', (event) => {
-                    const remoteVideo = document.getElementById('remoteVideo');
-                    if (remoteVideo.srcObject) {
-                        remoteVideo.srcObject.addTrack(event.track);
-                    } else {
-                        remoteVideo.srcObject = new MediaStream([event.track]);
-                    }
-                });
-
-                // Crear respuesta
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-
-                // Mostrar mensaje de éxito
-                showMessage(`\ud83d\udd04 Unido a la sala: ${roomId}`, 'success');
-                
-                // Actualizar UI
-                document.getElementById('joinBtn').textContent = 'Unido...';
-                document.getElementById('joinBtn').disabled = true;
-                document.getElementById('shareBtn').disabled = true;
-                document.getElementById('roomId').disabled = true;
-
-                console.log('Unido a sala:', roomId);
-                
-            } catch (error) {
-                console.error('Error al unirse a sala:', error);
-                showMessage(`\u274c Error: ${error.message}`, 'error');
-            }
-        }
-                
-            } catch (error) {
-                console.error('Error al compartir:', error);
-                showMessage(`\u274c Error: ${error.message}`, 'error');
-                
-                if (localStream) {
-                    localStream.getTracks().forEach(track => track.stop());
-                    localStream = null;
-                }
-            }
-        }
-
-        async function joinRoom() {
-            roomId = document.getElementById('roomId').value.trim();
-            
-            if (!roomId) {
-                showMessage('\u26a0\ufe0f Por favor, introduce un ID de sala', 'error');
-                return;
-            }
-
-            try {
-                // Crear conexión WebRTC
-                peerConnection = new RTCPeerConnection(configuration);
-                
-                // Manejar stream remoto
-                peerConnection.addEventListener('track', (event) => {
-                    const remoteVideo = document.getElementById('remoteVideo');
-                    if (remoteVideo.srcObject) {
-                        remoteVideo.srcObject.addTrack(event.track);
-                    } else {
-                        remoteVideo.srcObject = new MediaStream([event.track]);
-                    }
-                });
-
-                // Crear respuesta
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-
-                // Mostrar mensaje de éxito
-                showMessage(`\ud83d\udd04 Unido a la sala: ${roomId}`, 'success');
-                
-                // Actualizar UI
-                document.getElementById('joinBtn').textContent = 'Unido...';
-                document.getElementById('joinBtn').disabled = true;
-                document.getElementById('shareBtn').disabled = true;
-                document.getElementById('roomId').disabled = true;
-
-                console.log('Unido a sala:', roomId);
-                
-            } catch (error) {
-                console.error('Error al unirse a sala:', error);
-                showMessage(`\u274c Error: ${error.message}`, 'error');
-            }
-        }
-
-        function toggleAudio() {
-            if (localStream) {
-                isAudioEnabled = !isAudioEnabled;
-                localStream.getAudioTracks().forEach(track => track.enabled = isAudioEnabled);
-                document.getElementById('audioBtn').textContent = `Audio: ${isAudioEnabled ? 'Activado' : 'Desactivado'}`;
-            }
-        }
-
-        function toggleVideo() {
-            if (localStream) {
-                isVideoEnabled = !isVideoEnabled;
-                localStream.getVideoTracks().forEach(track => track.enabled = isVideoEnabled);
-                document.getElementById('videoBtn').textContent = `Video: ${isVideoEnabled ? 'Activado' : 'Desactivado'}`;
-            }
-        }
-
-        function stopSharing() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
-            
-            // Resetear UI
-            document.getElementById('shareBtn').textContent = 'Compartir pantalla';
-            document.getElementById('shareBtn').disabled = false;
-            document.getElementById('joinBtn').disabled = false;
-            document.getElementById('controlButtons').style.display = 'none';
-            document.getElementById('localVideoContainer').style.display = 'none';
-            document.getElementById('connectionInfo').style.display = 'none';
-            
-            showMessage('\ud83d\udc54 Compartición detenida', 'success');
-            console.log('Compartición detenida');
-        }
-
-        function showMessage(message, type = 'info') {
-            const messagesDiv = document.getElementById('messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = type;
-            messageDiv.textContent = message;
-            messagesDiv.appendChild(messageDiv);
-            
-            // Eliminar mensaje después de 5 segundos
-            setTimeout(() => {
-                messageDiv.remove();
-            }, 5000);
-        }
-
-        // Verificar soporte de WebRTC
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            showMessage('\u274c Tu navegador no soporta WebRTC', 'error');
-            document.getElementById('shareBtn').disabled = true;
-            document.getElementById('joinBtn').disabled = true;
-        }
-
-        // Verificar soporte de getDisplayMedia
-        if (!navigator.mediaDevices.getDisplayMedia && !isMobile) {
-            showMessage('\u26a0\ufe0f La compartición de pantalla no está disponible en este navegador', 'error');
-            document.getElementById('shareBtn').textContent = 'Compartir cámara';
-        }
-
-        // Mostrar info móvil si es necesario
-        if (isMobile) {
-            document.getElementById('mobileInfo').style.display = 'block';
-        }
             }
         }
 
@@ -637,7 +462,7 @@ async function startScreenShare() {
             }, 5000);
         }
 
-// Verificar soporte de WebRTC
+        // Verificar soporte de WebRTC
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             showMessage('❌ Tu navegador no soporta WebRTC', 'error');
             document.getElementById('shareBtn').disabled = true;
@@ -650,113 +475,24 @@ async function startScreenShare() {
             document.getElementById('shareBtn').textContent = 'Compartir cámara';
         }
 
-        // Verificar permisos de pantalla
-        if (!isMobile) {
-            navigator.mediaDevices.getDisplayMedia({ video: true })
-                .then(() => {
-                    // Soporte correcto
-                })
-                .catch(error => {
-                    showMessage('⚠️ No se puede acceder a la pantalla. Revisa los permisos del navegador.', 'error');
-                    document.getElementById('shareBtn').disabled = true;
-                });
-        }
-
-        // Verificar permisos de pantalla
-        if (!isMobile) {
-            navigator.mediaDevices.getDisplayMedia({ video: true })
-                .then(() => {
-                    // Soporte correcto
-                    console.log('Permisos de pantalla verificados');
-                })
-                .catch(error => {
-                    showMessage('⚠️ No se puede acceder a la pantalla. Revisa los permisos del navegador.', 'error');
-                    document.getElementById('shareBtn').disabled = true;
-                    
-                    // Mostrar ayuda detallada
-                    const helpDiv = document.createElement('div');
-                    helpDiv.className = 'error';
-                    helpDiv.innerHTML = `
-                        <p>\ud83d\udea8 Solución:</p>
-                        <ol>
-                            <li>Usa <strong>Chrome</strong> o <strong>Edge</strong></li>
-                            <li>Ve a <strong>chrome://settings/privacy</strong></li>
-                            <li>Activa <strong>"Allow sites to ask for access to screen"</strong></li>
-                            <li>Reinicia el navegador</li>
-                        </ol>
-                    `;
-                    document.getElementById('messages').appendChild(helpDiv);
-                });
-        }
-
-        // Inicializar
-        console.log('Aplicación de escritorio remoto iniciada');
-        console.log('Modo:', isMobile ? 'Móvil' : 'Escritorio');
+        // Mostrar info móvil si es necesario
         if (isMobile) {
             document.getElementById('mobileInfo').style.display = 'block';
+            showMessage('📱 Modo móvil: se usará cámara', 'info');
         }
-        
-        // Detectar si es Safari (tiene limitaciones en móvil)
-        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-        if (isSafari && isMobile) {
-            showMessage('⚠️ Safari en móvil tiene limitaciones - se usará cámara', 'info');
-        }
-        
-// Verificar si es Chrome/Edge (mejor soporte)
+
+        // Detectar navegador
         const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
         const isEdge = /Edg/.test(navigator.userAgent);
         const isFirefox = /Firefox/.test(navigator.userAgent);
         
         if (!isChrome && !isEdge && !isMobile) {
-            showMessage('⚠️ Para mejor experiencia, usa Chrome o Edge en escritorio', 'info');
-            
-            // Mostrar ayuda adicional
-            const browserHelp = document.createElement('div');
-            browserHelp.className = 'error';
-            browserHelp.innerHTML = `
-                <p>🚨 Descarga Chrome:</p>
-                <a href='https://www.google.com/chrome/' target='_blank' style='color: white; text-decoration: underline;'>https://www.google.com/chrome/</a>
-                
-                <p>⚠️ Firefox: Puede requerir configuración adicional</p><div>
-            `;
-            document.getElementById('messages').appendChild(browserHelp);
-        }
-        
-        // Verificar si es Firefox (puede necesitar configuración)
-        if (isFirefox && !isMobile) {
-            const firefoxHelp = document.createElement('div');
-            firefoxHelp.className = 'error';
-            firefoxHelp.innerHTML = `
-                <p>⚠️ Firefox: Activa screen sharing en about:config</p><div>
-                <ol>
-                    <li>t media.getusermedia.screensharing.enabled = true</li>
-                    <li> media.getusermedia.screensharing.allowed_domains = *</li>
-                </ol><div>
-            `;
-            document.getElementById('messages').appendChild(firefoxHelp);
-        }
-
-        // Verificar soporte de getDisplayMedia
-        if (!navigator.mediaDevices.getDisplayMedia && !isMobile) {
-            showMessage('⚠️ La compartición de pantalla no está disponible en este navegador', 'error');
-            document.getElementById('shareBtn').textContent = 'Compartir cámara';
+            showMessage('⚠️ Para mejor experiencia, usa Chrome o Edge', 'info');
         }
 
         // Inicializar
         console.log('Aplicación de escritorio remoto iniciada');
         console.log('Modo:', isMobile ? 'Móvil' : 'Escritorio');
-        if (isMobile) {
-            showMessage('📱 Modo móvil activado - se usará cámara', 'info');
-        }
-        
-        // Detectar si es Safari (tiene limitaciones en móvil)
-        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-        if (isSafari && isMobile) {
-            showMessage('⚠️ Safari en móvil tiene limitaciones - se usará cámara', 'info');
-        }
-
-        // Inicializar
-        console.log('Aplicación de escritorio remoto iniciada');
     </script>
 </body>
 </html>
