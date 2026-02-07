@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escritorio Remoto - WebRTC</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .video-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+        }
+
+        video {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .status {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .connection-info {
+            background: #f0f8ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 12px;
+        }
+
+        .connection-info strong {
+            color: #667eea;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #c33;
+        }
+
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border-left: 4px solid #3c3;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .input-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖥️ Escritorio Remoto - WebRTC</h1>
+        
+        <div class="section">
+            <h2>Compartir tu pantalla</h2>
+            <p>Comparte tu pantalla para que otros usuarios puedan verla en tiempo real.</p>
+            <div class="input-group">
+                <input type="text" id="roomName" placeholder="Nombre de la sala (opcional)">
+                <button onclick="startScreenShare()" id="shareBtn">Compartir pantalla</button>
+            </div>
+            <div id="shareStatus" class="status"></div>
+        </div>
+
+        <div class="section">
+            <h2>Ver pantalla remota</h2>
+            <p>Introduce el ID de la sala para ver la pantalla compartida.</p>
+            <div class="input-group">
+                <input type="text" id="roomId" placeholder="ID de la sala">
+                <button onclick="joinRoom()" id="joinBtn">Unirse a sala</button>
+            </div>
+            <div id="joinStatus" class="status"></div>
+        </div>
+
+        <div class="video-container" id="videoContainer">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <div id="localVideoContainer" style="display: none;">
+                <video id="localVideo" autoplay playsinline muted></video>
+            </div>
+        </div>
+
+        <div id="connectionInfo" class="connection-info" style="display: none;">
+            <strong>ID de sala:</strong> <span id="currentRoomId"></span>
+        </div>
+
+        <div id="messages"></div>
+
+        <div class="control-buttons" id="controlButtons" style="display: none;">
+            <button onclick="toggleAudio()" id="audioBtn">Audio: Apagado</button>
+            <button onclick="toggleVideo()" id="videoBtn">Video: Apagado</button>
+            <button onclick="stopSharing()" id="stopBtn">Detener</button>
+        </div>
+    </div>
+
+    <script>
+        let localStream = null;
+        let peerConnection = null;
+        let roomId = null;
+        let isAudioEnabled = true;
+        let isVideoEnabled = true;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        async function startScreenShare() {
+            try {
+                const roomName = document.getElementById('roomName').value || 'sala-' + Date.now();
+                
+                // Pedir permiso para compartir pantalla
+                localStream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: true, 
+                    audio: false 
+                });
+
+                // Mostrar video local
+                const localVideo = document.getElementById('localVideo');
+                localVideo.srcObject = localStream;
+                document.getElementById('localVideoContainer').style.display = 'block';
+
+                // Crear conexión WebRTC
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                // Añadir stream local
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                // Manejar conexiones
+                peerConnection.addEventListener('connectionstatechange', () => {
+                    console.log('Estado de conexión:', peerConnection.connectionState);
+                });
+
+                // Crear oferta
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                // Generar ID de sala
+                roomId = roomName;
+                document.getElementById('currentRoomId').textContent = roomId;
+                document.getElementById('connectionInfo').style.display = 'block';
+                document.getElementById('controlButtons').style.display = 'flex';
+                
+                // Mostrar mensaje de éxito
+                showMessage(`🌐 Compartiendo pantalla en la sala: ${roomId}`, 'success');
+                
+                // Actualizar botones
+                document.getElementById('shareBtn').textContent = 'Compartiendo...';
+                document.getElementById('shareBtn').disabled = true;
+                document.getElementById('joinBtn').disabled = true;
+
+                console.log('Compartiendo pantalla en sala:', roomId);
+                
+            } catch (error) {
+                console.error('Error al compartir pantalla:', error);
+                showMessage(`❌ Error: ${error.message}`, 'error');
+                
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                    localStream = null;
+                }
+            }
+        }
+
+        async function joinRoom() {
+            roomId = document.getElementById('roomId').value.trim();
+            
+            if (!roomId) {
+                showMessage('⚠️ Por favor, introduce un ID de sala', 'error');
+                return;
+            }
+
+            try {
+                // Crear conexión WebRTC
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                // Manejar stream remoto
+                peerConnection.addEventListener('track', (event) => {
+                    const remoteVideo = document.getElementById('remoteVideo');
+                    if (remoteVideo.srcObject) {
+                        remoteVideo.srcObject.addTrack(event.track);
+                    } else {
+                        remoteVideo.srcObject = new MediaStream([event.track]);
+                    }
+                });
+
+                // Crear respuesta
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                // Mostrar mensaje de éxito
+                showMessage(`🔄 Unido a la sala: ${roomId}`, 'success');
+                
+                // Actualizar UI
+                document.getElementById('joinBtn').textContent = 'Unido...';
+                document.getElementById('joinBtn').disabled = true;
+                document.getElementById('shareBtn').disabled = true;
+                document.getElementById('roomId').disabled = true;
+
+                console.log('Unido a sala:', roomId);
+                
+            } catch (error) {
+                console.error('Error al unirse a sala:', error);
+                showMessage(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function toggleAudio() {
+            if (localStream) {
+                isAudioEnabled = !isAudioEnabled;
+                localStream.getAudioTracks().forEach(track => track.enabled = isAudioEnabled);
+                document.getElementById('audioBtn').textContent = `Audio: ${isAudioEnabled ? 'Activado' : 'Desactivado'}`;
+            }
+        }
+
+        function toggleVideo() {
+            if (localStream) {
+                isVideoEnabled = !isVideoEnabled;
+                localStream.getVideoTracks().forEach(track => track.enabled = isVideoEnabled);
+                document.getElementById('videoBtn').textContent = `Video: ${isVideoEnabled ? 'Activado' : 'Desactivado'}`;
+            }
+        }
+
+        function stopSharing() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            // Resetear UI
+            document.getElementById('shareBtn').textContent = 'Compartir pantalla';
+            document.getElementById('shareBtn').disabled = false;
+            document.getElementById('joinBtn').disabled = false;
+            document.getElementById('controlButtons').style.display = 'none';
+            document.getElementById('localVideoContainer').style.display = 'none';
+            document.getElementById('connectionInfo').style.display = 'none';
+            
+            showMessage('🔌 Compartición detenida', 'success');
+            console.log('Compartición detenida');
+        }
+
+        function showMessage(message, type = 'info') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messagesDiv.appendChild(messageDiv);
+            
+            // Eliminar mensaje después de 5 segundos
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        // Verificar soporte de WebRTC
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            showMessage('❌ Tu navegador no soporta compartición de pantalla', 'error');
+            document.getElementById('shareBtn').disabled = true;
+            document.getElementById('joinBtn').disabled = true;
+        }
+
+        // Inicializar
+        console.log('Aplicación de escritorio remoto iniciada');
+    </script>
+</body>
+</html>
