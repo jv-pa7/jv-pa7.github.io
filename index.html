@@ -238,9 +238,9 @@
 
         <div class="section">
             <h2>Ver pantalla remota</h2>
-            <p>Introduce el ID de la sala para ver la pantalla compartida.</p>
+            <p>Introduce el ID de la sala (ej: SALA-AB12C) para ver la pantalla compartida.</p>
             <div class="input-group">
-                <input type="text" id="roomId" placeholder="ID de la sala">
+                <input type="text" id="roomId" placeholder="ID de la sala (ej: SALA-AB12C)">
                 <button onclick="joinRoom()" id="joinBtn">Unirse a sala</button>
             </div>
             <div id="joinStatus" class="status"></div>
@@ -343,8 +343,8 @@ const configuration = {
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
 
-                // Generar ID de sala
-                roomId = roomName;
+                // Generar ID de sala más corto
+                roomId = roomName || 'sala-' + Math.random().toString(36).substr(2, 5).toUpperCase();
                 document.getElementById('currentRoomId').textContent = roomId;
                 document.getElementById('connectionInfo').style.display = 'block';
                 document.getElementById('controlButtons').style.display = 'flex';
@@ -358,6 +358,60 @@ const configuration = {
                 document.getElementById('joinBtn').disabled = true;
 
                 console.log('Compartiendo en sala:', roomId);
+                
+            } catch (error) {
+                console.error('Error al compartir:', error);
+                showMessage(`\u274c Error: ${error.message}`, 'error');
+                
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                    localStream = null;
+                }
+            }
+        }
+
+        async function joinRoom() {
+            roomId = document.getElementById('roomId').value.trim();
+            
+            if (!roomId) {
+                showMessage('\u26a0\ufe0f Por favor, introduce un ID de sala', 'error');
+                return;
+            }
+
+            try {
+                // Crear conexión WebRTC
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                // Manejar stream remoto
+                peerConnection.addEventListener('track', (event) => {
+                    const remoteVideo = document.getElementById('remoteVideo');
+                    if (remoteVideo.srcObject) {
+                        remoteVideo.srcObject.addTrack(event.track);
+                    } else {
+                        remoteVideo.srcObject = new MediaStream([event.track]);
+                    }
+                });
+
+                // Crear respuesta
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                // Mostrar mensaje de éxito
+                showMessage(`\ud83d\udd04 Unido a la sala: ${roomId}`, 'success');
+                
+                // Actualizar UI
+                document.getElementById('joinBtn').textContent = 'Unido...';
+                document.getElementById('joinBtn').disabled = true;
+                document.getElementById('shareBtn').disabled = true;
+                document.getElementById('roomId').disabled = true;
+
+                console.log('Unido a sala:', roomId);
+                
+            } catch (error) {
+                console.error('Error al unirse a sala:', error);
+                showMessage(`\u274c Error: ${error.message}`, 'error');
+            }
+        }
                 
             } catch (error) {
                 console.error('Error al compartir:', error);
@@ -580,11 +634,63 @@ const configuration = {
             }, 5000);
         }
 
-        // Verificar soporte de WebRTC
+// Verificar soporte de WebRTC
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             showMessage('❌ Tu navegador no soporta WebRTC', 'error');
             document.getElementById('shareBtn').disabled = true;
             document.getElementById('joinBtn').disabled = true;
+        }
+
+        // Verificar soporte de getDisplayMedia
+        if (!navigator.mediaDevices.getDisplayMedia && !isMobile) {
+            showMessage('⚠️ La compartición de pantalla no está disponible en este navegador', 'error');
+            document.getElementById('shareBtn').textContent = 'Compartir cámara';
+        }
+
+        // Verificar permisos de pantalla
+        if (!isMobile) {
+            navigator.mediaDevices.getDisplayMedia({ video: true })
+                .then(() => {
+                    // Soporte correcto
+                })
+                .catch(error => {
+                    showMessage('⚠️ No se puede acceder a la pantalla. Revisa los permisos del navegador.', 'error');
+                    document.getElementById('shareBtn').disabled = true;
+                });
+        }
+
+        // Verificar permisos de pantalla
+        if (!isMobile) {
+            navigator.mediaDevices.getDisplayMedia({ video: true })
+                .then(() => {
+                    // Soporte correcto
+                    console.log('Permisos de pantalla verificados');
+                })
+                .catch(error => {
+                    showMessage('⚠️ No se puede acceder a la pantalla. Revisa los permisos del navegador.', 'error');
+                    document.getElementById('shareBtn').disabled = true;
+                });
+        }
+
+        // Inicializar
+        console.log('Aplicación de escritorio remoto iniciada');
+        console.log('Modo:', isMobile ? 'Móvil' : 'Escritorio');
+        if (isMobile) {
+            document.getElementById('mobileInfo').style.display = 'block';
+        }
+        
+        // Detectar si es Safari (tiene limitaciones en móvil)
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        if (isSafari && isMobile) {
+            showMessage('⚠️ Safari en móvil tiene limitaciones - se usará cámara', 'info');
+        }
+        
+        // Verificar si es Chrome/Edge (mejor soporte)
+        const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+        const isEdge = /Edg/.test(navigator.userAgent);
+        
+        if (!isChrome && !isEdge && !isMobile) {
+            showMessage('⚠️ Para mejor experiencia, usa Chrome o Edge en escritorio', 'info');
         }
 
         // Verificar soporte de getDisplayMedia
