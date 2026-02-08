@@ -709,7 +709,20 @@
                 const remoteStream = new MediaStream();
                 const remoteVideo = document.getElementById('remoteVideo');
                 remoteVideo.srcObject = remoteStream;
-                console.log('📹 MediaStream remoto creado');
+                // Mutear para permitir autoplay en la mayoría de navegadores
+                remoteVideo.muted = true;
+                // Mostrar controles para depuración (puede quitarse en producción)
+                remoteVideo.controls = true;
+                console.log('📹 MediaStream remoto creado (muted, controls)');
+                // Añadir listeners de depuración
+                remoteVideo.addEventListener('loadedmetadata', () => {
+                    console.log('remoteVideo loadedmetadata', remoteVideo.videoWidth, remoteVideo.videoHeight, 'readyState', remoteVideo.readyState);
+                });
+                remoteVideo.addEventListener('playing', () => {
+                    console.log('remoteVideo playing — tracks:', remoteStream.getTracks().map(t=>t.kind));
+                });
+                // Añadir borde para verificar visibilidad (depuración)
+                remoteVideo.style.outline = '2px solid rgba(255,0,0,0.6)';
                 
                 viewerPeerConnection.addEventListener('signalingstatechange', () => {
                     console.log('[ESPECTADOR] signalingState:', viewerPeerConnection.signalingState);
@@ -718,7 +731,7 @@
                 viewerPeerConnection.addEventListener('track', (event) => {
                     console.log('Track remoto recibido:', event.track.kind);
                     remoteStream.addTrack(event.track);
-                    console.log('✅ Track añadido al stream remoto');
+                    console.log('✅ Track añadido al stream remoto — tipo:', event.track.kind, 'videoTracks:', remoteStream.getVideoTracks().length, 'audioTracks:', remoteStream.getAudioTracks().length);
                     // Intentar reproducir el video cuando llegue el primer track
                     try {
                         if (remoteVideo.paused) {
