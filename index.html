@@ -520,14 +520,14 @@
                 
                 localStream.getTracks().forEach(track => {
                     sharerPeerConnection.addTrack(track, localStream);
+                });
 
-                                // Manejador de ICE candidates del compartidor
-                                sharerPeerConnection.addEventListener('icecandidate', (event) => {
-                                    if (event.candidate && currentRoomId && db) {
-                                        console.log('📤 Enviando ICE candidate del compartidor:', event.candidate.candidate.substring(0, 50));
-                                        db.ref(`rooms/${currentRoomId}/sharerCandidates`).push(event.candidate);
-                                    }
-                                });
+                // Manejador de ICE candidates del compartidor
+                sharerPeerConnection.addEventListener('icecandidate', (event) => {
+                    if (event.candidate && currentRoomId && db) {
+                        console.log('📤 Enviando ICE candidate del compartidor:', event.candidate.candidate.substring(0, 50));
+                        db.ref(`rooms/${currentRoomId}/sharerCandidates`).push(event.candidate);
+                    }
                 });
 
                 // Crear oferta
@@ -719,18 +719,26 @@
                     console.log('Track remoto recibido:', event.track.kind);
                     remoteStream.addTrack(event.track);
                     console.log('✅ Track añadido al stream remoto');
+                    // Intentar reproducir el video cuando llegue el primer track
+                    try {
+                        if (remoteVideo.paused) {
+                            remoteVideo.play().catch(err => console.warn('play() falló:', err));
+                        }
+                    } catch (e) {
+                        console.warn('Error intentando reproducir remoteVideo:', e);
+                    }
                 });
 
                 viewerPeerConnection.addEventListener('connectionstatechange', () => {
                     console.log('[ESPECTADOR] connectionState:', viewerPeerConnection.connectionState);
+                });
 
-                                // Manejador de ICE candidates del espectador
-                                viewerPeerConnection.addEventListener('icecandidate', (event) => {
-                                    if (event.candidate && roomId && db) {
-                                        console.log('📤 Enviando ICE candidate del espectador:', event.candidate.candidate.substring(0, 50));
-                                        db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate);
-                                    }
-                                });
+                // Manejador de ICE candidates del espectador
+                viewerPeerConnection.addEventListener('icecandidate', (event) => {
+                    if (event.candidate && roomId && db) {
+                        console.log('📤 Enviando ICE candidate del espectador:', event.candidate.candidate.substring(0, 50));
+                        db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate);
+                    }
                 });
 
                 // Establecer oferta remota
