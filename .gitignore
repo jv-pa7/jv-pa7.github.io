@@ -1,0 +1,17 @@
+# Configuración de Firebase (contiene keys)
+firebase-config.js
+
+# Node
+node_modules/
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

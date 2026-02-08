@@ -296,6 +296,9 @@
             appId: "1:1032485952223:web:9b69ed418f1ea8446f676a",
             measurementId: "G-0SQGFF6H2K"
         };
+        
+        // 🔐 NOTA: La API Key es visible en el cliente, pero Firebase Rules la protegen
+        // Para opción más segura, migrar a backend Node.js (Ver README para detalles)
 
         // Inicializar Firebase - Esperar a que las librerías carguen
         let db = null;
@@ -396,8 +399,8 @@
         // Generar ID de sala aleatorio
         function generateRoomId() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let result = 'ROOM';
-            for (let i = 0; i < 8; i++) {
+            let result = '';
+            for (let i = 0; i < 5; i++) {
                 result += chars.charAt(Math.floor(Math.random() * chars.length));
             }
             return result;
@@ -538,9 +541,11 @@
                 if (db && !remoteIceCandidatesRef) {
                     console.log('🎧 PRE-registrando listener para candidates del espectador');
                     remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
+                    console.log('✅ Referencia creada:', remoteIceCandidatesRef.path);
                     
                     // Buscar candidates EXISTENTES al registrarse
                     remoteIceCandidatesRef.once('value', (snapshot) => {
+                        console.log('✅ .once(value) completado para viewerCandidates');
                         if (snapshot.exists()) {
                             console.log('🔄 Buscando candidates EXISTENTES del espectador...');
                             snapshot.forEach((childSnapshot) => {
@@ -555,12 +560,15 @@
                         } else {
                             console.log('✨ No hay candidates existentes todavía');
                         }
+                    }, (error) => {
+                        console.error('❌ Error en .once(value) viewerCandidates:', error.code, error.message);
                     });
                     
                     // Ahora escuchar NUEVOS candidates
+                    console.log('🎧 Registrando .on(child_added) para viewerCandidates...');
                     remoteIceCandidatesRef.on('child_added', (snapshot) => {
                         const candidate = snapshot.val();
-                        console.log('📥 PRE-listener disparado NUEVO candidate, candidate:', !!candidate, 'conn:', !!sharerPeerConnection);
+                        console.log('📥 🔔 .on(child_added) DISPARÓ! candidate:', !!candidate, 'conn:', !!sharerPeerConnection);
                         if (candidate && sharerPeerConnection) {
                             console.log('📥 Agregando NUEVO ICE candidate del espectador:', candidate.candidate?.substring(0, 50));
                             sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
@@ -570,6 +578,9 @@
                         } else {
                             console.warn('⚠️ Candidate o conn inválidos:', {hasCandidate: !!candidate, hasConn: !!sharerPeerConnection});
                         }
+                    }, (error) => {
+                        console.error('❌ Error en .on(child_added) viewerCandidates:', error.code, error.message);
+                    });
                     });
                 } else {
                     console.warn('❌ No se pudo pre-registrar:', {db: !!db, ref: !!remoteIceCandidatesRef});
@@ -782,9 +793,11 @@
                 if (db && !iceCandidatesRef) {
                     console.log('🎧 PRE-registrando listener para candidates del compartidor sala:', roomId);
                     iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
+                    console.log('✅ Referencia creada:', iceCandidatesRef.path);
                     
                     // Añadir handler que busca candidates EXISTENTES al registrarse
                     iceCandidatesRef.once('value', (snapshot) => {
+                        console.log('✅ .once(value) completado para sharerCandidates');
                         if (snapshot.exists()) {
                             console.log('🔄 Buscando candidates EXISTENTES del compartidor...');
                             snapshot.forEach((childSnapshot) => {
@@ -799,12 +812,15 @@
                         } else {
                             console.log('✨ No hay candidates existentes todavía en compartidor');
                         }
+                    }, (error) => {
+                        console.error('❌ Error en .once(value) sharerCandidates:', error.code, error.message);
                     });
                     
                     // Ahora escuchar NUEVOS candidates
+                    console.log('🎧 Registrando .on(child_added) para sharerCandidates...');
                     iceCandidatesRef.on('child_added', (snapshot) => {
                         const candidate = snapshot.val();
-                        console.log('📥 PRE-listener disparado NUEVO candidate, candidate:', !!candidate, 'conn:', !!viewerPeerConnection);
+                        console.log('📥 🔔 .on(child_added) DISPARÓ! candidate:', !!candidate, 'conn:', !!viewerPeerConnection);
                         if (candidate && viewerPeerConnection) {
                             console.log('📥 Agregando NUEVO ICE candidate del compartidor:', candidate.candidate?.substring(0, 50));
                             viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
@@ -814,6 +830,8 @@
                         } else {
                             console.warn('⚠️ Candidate o conn inválidos:', {hasCandidate: !!candidate, hasConn: !!viewerPeerConnection});
                         }
+                    }, (error) => {
+                        console.error('❌ Error en .on(child_added) sharerCandidates:', error.code, error.message);
                     });
                 } else {
                     console.warn('❌ No se pudo PRE-registrar:', {db: !!db, ref: !!iceCandidatesRef});
