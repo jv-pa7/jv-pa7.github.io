@@ -538,11 +538,31 @@
                 if (db && !remoteIceCandidatesRef) {
                     console.log('🎧 PRE-registrando listener para candidates del espectador');
                     remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
+                    
+                    // Buscar candidates EXISTENTES al registrarse
+                    remoteIceCandidatesRef.once('value', (snapshot) => {
+                        if (snapshot.exists()) {
+                            console.log('🔄 Buscando candidates EXISTENTES del espectador...');
+                            snapshot.forEach((childSnapshot) => {
+                                const candidate = childSnapshot.val();
+                                if (candidate && sharerPeerConnection) {
+                                    console.log('📥 Agregando candidate EXISTENTE del espectador:', candidate.candidate?.substring(0, 50));
+                                    sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                        console.warn('⚠️ Error adding existing viewer candidate:', err);
+                                    });
+                                }
+                            });
+                        } else {
+                            console.log('✨ No hay candidates existentes todavía');
+                        }
+                    });
+                    
+                    // Ahora escuchar NUEVOS candidates
                     remoteIceCandidatesRef.on('child_added', (snapshot) => {
                         const candidate = snapshot.val();
-                        console.log('📥 PRE-listener disparado, candidate:', !!candidate, 'conn:', !!sharerPeerConnection);
+                        console.log('📥 PRE-listener disparado NUEVO candidate, candidate:', !!candidate, 'conn:', !!sharerPeerConnection);
                         if (candidate && sharerPeerConnection) {
-                            console.log('📥 Agregando ICE candidate del espectador:', candidate.candidate?.substring(0, 50));
+                            console.log('📥 Agregando NUEVO ICE candidate del espectador:', candidate.candidate?.substring(0, 50));
                             sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
                                 console.warn('⚠️ Error adding viewer ICE candidate:', err);
                             });
@@ -558,8 +578,24 @@
                 // Manejador de ICE candidates del compartidor
                 sharerPeerConnection.addEventListener('icecandidate', (event) => {
                     if (event.candidate && currentRoomId && db) {
-                        console.log('📤 Enviando ICE candidate del compartidor:', event.candidate.candidate.substring(0, 50));
-                        db.ref(`rooms/${currentRoomId}/sharerCandidates`).push(event.candidate);
+                        const candStr = event.candidate.candidate.substring(0, 50);
+                        console.log('📤 Enviando ICE candidate del compartidor:', candStr);
+                        db.ref(`rooms/${currentRoomId}/sharerCandidates`).push(event.candidate)
+                            .then(() => {
+                                console.log('✅ ✓ GUARDADO en Firebase sharerCandidates:', candStr);
+                            })
+                            .catch(err => {
+                                console.error('❌ ERROR guardando candidate compartidor:', err);
+                                // Fallback a localStorage
+                                try {
+                                    const candidates = JSON.parse(localStorage.getItem(`webrtc_cands_${currentRoomId}_sharer`) || '[]');
+                                    candidates.push(event.candidate);
+                                    localStorage.setItem(`webrtc_cands_${currentRoomId}_sharer`, JSON.stringify(candidates));
+                                    console.log('💾 Guardado en localStorage como fallback');
+                                } catch (e) {
+                                    console.error('❌ ERROR guardar fallback:', e);
+                                }
+                            });
                     }
                 });
 
@@ -746,11 +782,31 @@
                 if (db && !iceCandidatesRef) {
                     console.log('🎧 PRE-registrando listener para candidates del compartidor sala:', roomId);
                     iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
+                    
+                    // Añadir handler que busca candidates EXISTENTES al registrarse
+                    iceCandidatesRef.once('value', (snapshot) => {
+                        if (snapshot.exists()) {
+                            console.log('🔄 Buscando candidates EXISTENTES del compartidor...');
+                            snapshot.forEach((childSnapshot) => {
+                                const candidate = childSnapshot.val();
+                                if (candidate && viewerPeerConnection) {
+                                    console.log('📥 Agregando candidate EXISTENTE del compartidor:', candidate.candidate?.substring(0, 50));
+                                    viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                        console.warn('⚠️ Error adding existing sharer candidate:', err);
+                                    });
+                                }
+                            });
+                        } else {
+                            console.log('✨ No hay candidates existentes todavía en compartidor');
+                        }
+                    });
+                    
+                    // Ahora escuchar NUEVOS candidates
                     iceCandidatesRef.on('child_added', (snapshot) => {
                         const candidate = snapshot.val();
-                        console.log('📥 PRE-listener disparado, candidate:', !!candidate, 'conn:', !!viewerPeerConnection);
+                        console.log('📥 PRE-listener disparado NUEVO candidate, candidate:', !!candidate, 'conn:', !!viewerPeerConnection);
                         if (candidate && viewerPeerConnection) {
-                            console.log('📥 Agregando ICE candidate del compartidor:', candidate.candidate?.substring(0, 50));
+                            console.log('📥 Agregando NUEVO ICE candidate del compartidor:', candidate.candidate?.substring(0, 50));
                             viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
                                 console.warn('⚠️ Error adding sharer ICE candidate:', err);
                             });
@@ -850,8 +906,24 @@
                 // Manejador de ICE candidates del espectador
                 viewerPeerConnection.addEventListener('icecandidate', (event) => {
                     if (event.candidate && roomId && db) {
-                        console.log('📤 Enviando ICE candidate del espectador:', event.candidate.candidate.substring(0, 50));
-                        db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate);
+                        const candStr = event.candidate.candidate.substring(0, 50);
+                        console.log('📤 Enviando ICE candidate del espectador:', candStr);
+                        db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate)
+                            .then(() => {
+                                console.log('✅ ✓ GUARDADO en Firebase viewerCandidates:', candStr);
+                            })
+                            .catch(err => {
+                                console.error('❌ ERROR guardando candidate espectador:', err);
+                                // Fallback a localStorage
+                                try {
+                                    const candidates = JSON.parse(localStorage.getItem(`webrtc_cands_${roomId}_viewer`) || '[]');
+                                    candidates.push(event.candidate);
+                                    localStorage.setItem(`webrtc_cands_${roomId}_viewer`, JSON.stringify(candidates));
+                                    console.log('💾 Guardado en localStorage como fallback');
+                                } catch (e) {
+                                    console.error('❌ ERROR guardar fallback:', e);
+                                }
+                            });
                     }
                 });
 
