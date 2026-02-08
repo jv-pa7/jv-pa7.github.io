@@ -511,6 +511,7 @@
                 const localVideo = document.getElementById('localVideo');
                 localVideo.srcObject = localStream;
                 document.getElementById('localVideoContainer').style.display = 'block';
+                console.log('📹 Video local capturado:', {videoTracks: localStream.getVideoTracks().length, audioTracks: localStream.getAudioTracks().length});
 
                 // Crear peer connection para compartidor
                 sharerPeerConnection = new RTCPeerConnection(configuration);
@@ -523,7 +524,8 @@
                     console.log('[COMPARTIDOR] connectionState:', sharerPeerConnection.connectionState);
                 });
                 
-                localStream.getTracks().forEach(track => {
+                localStream.getTracks().forEach((track, idx) => {
+                    console.log(`[COMPARTIDOR] Agregando track ${idx}:`, track.kind, 'enabled:', track.enabled);
                     sharerPeerConnection.addTrack(track, localStream);
                 });
 
@@ -607,8 +609,24 @@
                             }
                             sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                             showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
-                            console.log('Espectador conectado vía Firebase');
+                            console.log('✅ [COMPARTIDOR] Answer recibida del espectador, transmitiendo...');
                             roomRef.off('value'); // Dejar de escuchar
+                            
+                            // Iniciar polling de stats en el compartidor
+                            if (!statsIntervalRef) {
+                                statsIntervalRef = setInterval(async () => {
+                                    try {
+                                        const stats = await sharerPeerConnection.getStats();
+                                        stats.forEach(report => {
+                                            if (report.type === 'outbound-rtp' && report.kind === 'video') {
+                                                console.log('✅ STATS SHARER outbound-rtp video:', {bytesSent: report.bytesSent, framesSent: report.framesSent});
+                                            }
+                                        });
+                                    } catch (err) {
+                                        console.warn('Error reading sharer stats:', err);
+                                    }
+                                }, 2000);
+                            }
                             
                                                     // Escuchar ICE candidates del espectador
                                                     if (!remoteIceCandidatesRef) {
@@ -752,20 +770,29 @@
                         console.warn('Error forzando play/re-assign:', e);
                     }
 
-                    // Iniciar polling de stats para ver bytesReceived
+                    // Iniciar polling de stats para diagnosticar flujo de datos
                     if (viewerPeerConnection && !statsIntervalRef) {
                         statsIntervalRef = setInterval(async () => {
                             try {
                                 const stats = await viewerPeerConnection.getStats();
+                                let reportTypes = {};
                                 stats.forEach(report => {
+                                    reportTypes[report.type] = (reportTypes[report.type] || 0) + 1;
                                     if (report.type === 'inbound-rtp' && report.kind === 'video') {
-                                        console.log('STATS inbound-rtp video:', {bytesReceived: report.bytesReceived, packetsLost: report.packetsLost, framesDecoded: report.framesDecoded});
+                                        console.log('✅ STATS inbound-rtp video:', {bytesReceived: report.bytesReceived, packetsLost: report.packetsLost, framesDecoded: report.framesDecoded});
+                                    } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                                        console.log('✅ STATS candidate-pair succeeded:', {currentRoundTripTime: report.currentRoundTripTime, availableOutgoingBitrate: report.availableOutgoingBitrate});
+                                    } else if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                                        console.log('✅ STATS inbound-rtp audio:', {bytesReceived: report.bytesReceived});
                                     }
                                 });
+                                if (Object.keys(reportTypes).length > 0) {
+                                    console.log('📊 Tipos de report:', reportTypes);
+                                }
                             } catch (err) {
                                 console.warn('Error reading stats:', err);
                             }
-                        }, 1000);
+                        }, 2000);
                     }
                     // Intentar reproducir el video cuando llegue el primer track
                     try {
