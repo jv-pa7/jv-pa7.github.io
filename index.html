@@ -343,8 +343,20 @@
             if (!db) {
                 console.warn('⚠️ Reintentando inicialización de Firebase...');
                 initializeFirebase();
+            } else {
+                // Firebase inicializó correctamente, ocultar advertencia
+                document.getElementById('firebaseWarning').style.display = 'none';
+                console.log('🔥 Firebase listo para usar');
             }
         }, 2000);
+
+        // Como último recurso, mostrar advertencia si Firebase no está disponible
+        setTimeout(() => {
+            if (!db) {
+                document.getElementById('firebaseWarning').style.display = 'block';
+                console.error('❌ Firebase no disponible, usando localStorage');
+            }
+        }, 4000);
 
         let localStream = null;
         let sharerPeerConnection = null;
@@ -742,14 +754,9 @@
             showMessage('⚠️ La compartición de pantalla no está disponible', 'error');
         }
 
-        // Mostrar advertencia si Firebase no está configurado
-        if (!db) {
-            document.getElementById('firebaseWarning').style.display = 'block';
-        }
-
         console.log('✅ Aplicación de escritorio remoto iniciada');
         console.log('Modo:', isMobile ? 'Móvil' : 'Escritorio');
-        console.log('BD:', db ? 'Firebase' : 'localStorage (local)');
+        console.log('BD: Esperando inicialización de Firebase...');
     </script>
 </body>
 </html>
