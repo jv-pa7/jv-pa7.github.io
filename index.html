@@ -582,18 +582,25 @@
                 listenForViewerResponse(currentRoomId);
                 
                 // IMPORTANTE: Iniciar listener de ICE candidates AHORA, antes de que lleguen
+                console.log('🔍 Iniciando setup de listeners ICE... db:', !!db, 'remoteIceCandidatesRef:', !!remoteIceCandidatesRef);
                 if (db && !remoteIceCandidatesRef) {
-                    console.log('🎧 Iniciando listener de ICE candidates del espectador...');
+                    console.log('🎧 Iniciando listener de ICE candidates del espectador en sala:', currentRoomId);
                     remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
                     remoteIceCandidatesRef.on('child_added', (snapshot) => {
                         const candidate = snapshot.val();
                         if (candidate && sharerPeerConnection) {
+                            console.log('📥 Agregando ICE candidate del espectador:', candidate.candidate?.substring(0, 50));
                             sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
                                 console.warn('⚠️ Error adding viewer ICE candidate:', err);
                             });
-                            console.log('✅ 📥 ICE candidate del espectador agregado');
+                            console.log('✅ 📥 ICE candidate del espectador AGREGADO');
+                        } else {
+                            console.warn('⚠️ Candidate inválido o sin sharerPeerConnection:', !!candidate, !!sharerPeerConnection);
                         }
                     });
+                } else {
+                    if (!db) console.warn('❌ db es NULL');
+                    if (remoteIceCandidatesRef) console.warn('❌ remoteIceCandidatesRef ya está activo');
                 }
                 
                 console.log('Compartiendo en sala:', currentRoomId);
@@ -780,17 +787,20 @@
                         statsIntervalRef = setInterval(async () => {
                             try {
                                 const stats = await viewerPeerConnection.getStats();
-                                let hasVideo = false;
+                                let hasVideo = false, hasCandidate = false;
+                                const reportSummary = {};
                                 stats.forEach(report => {
+                                    reportSummary[report.type] = (reportSummary[report.type] || 0) + 1;
                                     if (report.type === 'inbound-rtp' && report.kind === 'video') {
                                         hasVideo = true;
                                         console.log('✅ STATS inbound-rtp video:', {bytesReceived: report.bytesReceived, packetsLost: report.packetsLost, framesDecoded: report.framesDecoded});
                                     } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-                                        console.log('✅ STATS candidate-pair succeeded:', {currentRoundTripTime: report.currentRoundTripTime, availableOutgoingBitrate: report.availableOutgoingBitrate});
+                                        hasCandidate = true;
+                                        console.log('✅ STATS candidate-pair succeeded:', {currentRoundTripTime: report.currentRoundTripTime});
                                     }
                                 });
-                                if (!hasVideo) {
-                                    console.log('⚠️ No inbound-rtp video report yet, total reports:', stats.size);
+                                if (!hasVideo && !hasCandidate) {
+                                    console.log('⚠️ Sin inbound-rtp video, Sin candidate-pair succeeded. Reports:', reportSummary);
                                 }
                             } catch (err) {
                                 console.error('❌ Error reading stats:', err);
@@ -822,18 +832,25 @@
                 });
 
                 // IMPORTANTE: Iniciar listener de ICE candidates del compartidor ANTES de cualquier cosa
+                console.log('🔍 Iniciando setup de listeners ICE del espectador... db:', !!db, 'iceCandidatesRef:', !!iceCandidatesRef);
                 if (db && !iceCandidatesRef) {
-                    console.log('🎧 Iniciando listener de ICE candidates del compartidor...');
+                    console.log('🎧 Iniciando listener de ICE candidates del compartidor en sala:', roomId);
                     iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
                     iceCandidatesRef.on('child_added', (snapshot) => {
                         const candidate = snapshot.val();
                         if (candidate && viewerPeerConnection) {
+                            console.log('📥 Agregando ICE candidate del compartidor:', candidate.candidate?.substring(0, 50));
                             viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
                                 console.warn('⚠️ Error adding sharer ICE candidate:', err);
                             });
-                            console.log('✅ 📥 ICE candidate del compartidor agregado');
+                            console.log('✅ 📥 ICE candidate del compartidor AGREGADO');
+                        } else {
+                            console.warn('⚠️ Candidate inválido o sin viewerPeerConnection:', !!candidate, !!viewerPeerConnection);
                         }
                     });
+                } else {
+                    if (!db) console.warn('❌ db es NULL en espectador');
+                    if (iceCandidatesRef) console.warn('❌ iceCandidatesRef ya está activo');
                 }
 
                 // Establecer oferta remota
