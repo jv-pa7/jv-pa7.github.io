@@ -522,7 +522,10 @@
                 const roomData = {
                     roomId: currentRoomId,
                     sharerName: userName,
-                    offer: sharerPeerConnection.localDescription,
+                    offer: {
+                        type: sharerPeerConnection.localDescription.type,
+                        sdp: sharerPeerConnection.localDescription.sdp
+                    },
                     timestamp: Date.now(),
                     status: 'waiting'
                 };
@@ -574,6 +577,11 @@
                     const data = snapshot.val();
                     if (data && data.answer && sharerPeerConnection) {
                         try {
+                            // Validar estructura de answer
+                            if (!data.answer.type || !data.answer.sdp) {
+                                console.warn('Answer inválida:', data.answer);
+                                return;
+                            }
                             sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                             showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
                             console.log('Espectador conectado vía Firebase');
@@ -589,9 +597,14 @@
                     const roomData = localStorage.getItem(`webrtc_room_${roomId}`);
                     if (roomData) {
                         const data = JSON.parse(roomData);
-                        if (data.answer && sharerPeerConnection) {
+                        if (data && data.answer && sharerPeerConnection) {
                             clearInterval(checkInterval);
                             try {
+                                // Validar estructura de answer
+                                if (!data.answer.type || !data.answer.sdp) {
+                                    console.warn('Answer inválida:', data.answer);
+                                    return;
+                                }
                                 sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                                 showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
                                 console.log('Espectador conectado vía localStorage');
@@ -646,6 +659,13 @@
 
                 const remoteOffer = roomData.offer;
 
+                // Validar que el offer tiene la estructura correcta
+                if (!remoteOffer || !remoteOffer.type || !remoteOffer.sdp) {
+                    showMessage(`❌ La oferta de la sala es inválida`, 'error');
+                    console.error('Oferta inválida:', remoteOffer);
+                    return;
+                }
+
                 // Mostrar nombre del compartidor
                 document.getElementById('sharerName').textContent = roomData.sharerName;
                 document.getElementById('sharerInfo').style.display = 'block';
@@ -679,7 +699,10 @@
                 await viewerPeerConnection.setLocalDescription(answer);
 
                 // Guardar respuesta en Firebase o localStorage
-                roomData.answer = viewerPeerConnection.localDescription;
+                roomData.answer = {
+                    type: viewerPeerConnection.localDescription.type,
+                    sdp: viewerPeerConnection.localDescription.sdp
+                };
                 roomData.viewerName = viewerName;
                 roomData.status = 'connected';
 
