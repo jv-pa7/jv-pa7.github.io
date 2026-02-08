@@ -299,10 +299,15 @@
 
         // Inicializar Firebase
         try {
-            firebase.initializeApp(firebaseConfig);
+            // Evitar inicializar dos veces
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+                console.log('✅ Firebase iniciado correctamente');
+            }
             var db = firebase.database();
-            console.log('✅ Firebase iniciado correctamente');
+            console.log('✅ Base de datos Firebase conectada');
         } catch (error) {
+            console.error('❌ Error de Firebase:', error);
             console.warn('⚠️ Firebase no configurado. Usando modo local.');
             var db = null;
         }
