@@ -366,6 +366,8 @@
         let isVideoEnabled = true;
         let currentRole = null;
         let roomRef = null;
+        let iceCandidatesRef = null;
+        let remoteIceCandidatesRef = null;
 
         const configuration = {
             iceServers: [
@@ -460,6 +462,14 @@
                     });
                     roomRef.off('value');
                     roomRef = null;
+                                    if (iceCandidatesRef) {
+                                        iceCandidatesRef.off('child_added');
+                                        iceCandidatesRef = null;
+                                    }
+                                    if (remoteIceCandidatesRef) {
+                                        remoteIceCandidatesRef.off('child_added');
+                                        remoteIceCandidatesRef = null;
+                                    }
                 } else {
                     localStorage.removeItem(`webrtc_room_${currentRoomId}`);
                 }
@@ -510,6 +520,14 @@
                 
                 localStream.getTracks().forEach(track => {
                     sharerPeerConnection.addTrack(track, localStream);
+
+                                // Manejador de ICE candidates del compartidor
+                                sharerPeerConnection.addEventListener('icecandidate', (event) => {
+                                    if (event.candidate && currentRoomId && db) {
+                                        console.log('📤 Enviando ICE candidate del compartidor:', event.candidate.candidate.substring(0, 50));
+                                        db.ref(`rooms/${currentRoomId}/sharerCandidates`).push(event.candidate);
+                                    }
+                                });
                 });
 
                 // Crear oferta
@@ -586,6 +604,20 @@
                             showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
                             console.log('Espectador conectado vía Firebase');
                             roomRef.off('value'); // Dejar de escuchar
+                            
+                                                    // Escuchar ICE candidates del espectador
+                                                    if (!remoteIceCandidatesRef) {
+                                                        remoteIceCandidatesRef = db.ref(`rooms/${roomId}/viewerCandidates`);
+                                                        remoteIceCandidatesRef.on('child_added', (snapshot) => {
+                                                            const candidate = snapshot.val();
+                                                            if (candidate && sharerPeerConnection) {
+                                                                sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                                                    console.warn('Error adding ICE candidate:', err);
+                                                                });
+                                                                console.log('📥 ICE candidate del espectador agregado');
+                                                            }
+                                                        });
+                                                    }
                         } catch (error) {
                             console.error('Error al establecer respuesta:', error);
                         }
@@ -691,6 +723,14 @@
 
                 viewerPeerConnection.addEventListener('connectionstatechange', () => {
                     console.log('[ESPECTADOR] connectionState:', viewerPeerConnection.connectionState);
+
+                                // Manejador de ICE candidates del espectador
+                                viewerPeerConnection.addEventListener('icecandidate', (event) => {
+                                    if (event.candidate && roomId && db) {
+                                        console.log('📤 Enviando ICE candidate del espectador:', event.candidate.candidate.substring(0, 50));
+                                        db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate);
+                                    }
+                                });
                 });
 
                 // Establecer oferta remota
@@ -699,6 +739,20 @@
                 // Crear respuesta
                 const answer = await viewerPeerConnection.createAnswer();
                 await viewerPeerConnection.setLocalDescription(answer);
+
+                // Escuchar ICE candidates del compartidor
+                if (db && !iceCandidatesRef) {
+                    iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
+                    iceCandidatesRef.on('child_added', (snapshot) => {
+                        const candidate = snapshot.val();
+                        if (candidate && viewerPeerConnection) {
+                            viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                console.warn('Error adding ICE candidate:', err);
+                            });
+                            console.log('📥 ICE candidate del compartidor agregado');
+                        }
+                    });
+                }
 
                 // Guardar respuesta en Firebase o localStorage
                 roomData.answer = {
