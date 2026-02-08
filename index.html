@@ -426,10 +426,45 @@
         // Volver al inicio
         function backToRole() {
             currentRole = null;
+            // Primero limpiar recursos (sin llamar a backToRole)
+            cleanupConnection();
+            // Luego resetear UI
             document.getElementById('roleSelection').style.display = 'block';
             document.getElementById('sharerSection').style.display = 'none';
             document.getElementById('viewerSection').style.display = 'none';
-            stopSharing();
+        }
+
+        // Limpiar recursos de conexión
+        function cleanupConnection() {
+            if (sharerPeerConnection) {
+                sharerPeerConnection.close();
+                sharerPeerConnection = null;
+            }
+            
+            if (viewerPeerConnection) {
+                viewerPeerConnection.close();
+                viewerPeerConnection = null;
+            }
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            // Limpiar en Firebase o localStorage
+            if (currentRoomId) {
+                if (db && roomRef) {
+                    db.ref(`rooms/${currentRoomId}`).remove().catch(err => {
+                        console.warn('Error limpiando Firebase:', err);
+                        localStorage.removeItem(`webrtc_room_${currentRoomId}`);
+                    });
+                    roomRef.off('value');
+                    roomRef = null;
+                } else {
+                    localStorage.removeItem(`webrtc_room_${currentRoomId}`);
+                }
+                currentRoomId = null;
+            }
         }
 
         // Compartir pantalla
@@ -690,34 +725,7 @@
         }
 
         function stopSharing() {
-            if (sharerPeerConnection) {
-                sharerPeerConnection.close();
-                sharerPeerConnection = null;
-            }
-            
-            if (viewerPeerConnection) {
-                viewerPeerConnection.close();
-                viewerPeerConnection = null;
-            }
-            
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
-            
-            // Limpiar en Firebase o localStorage
-            if (currentRoomId) {
-                if (db && roomRef) {
-                    db.ref(`rooms/${currentRoomId}`).remove().catch(err => {
-                        console.warn('Error limpiando Firebase:', err);
-                        localStorage.removeItem(`webrtc_room_${currentRoomId}`);
-                    });
-                    roomRef.off('value');
-                    roomRef = null;
-                } else {
-                    localStorage.removeItem(`webrtc_room_${currentRoomId}`);
-                }
-            }
+            cleanupConnection();
             
             document.getElementById('shareBtn').textContent = 'Compartir pantalla';
             document.getElementById('shareBtn').disabled = false;
@@ -727,7 +735,6 @@
             document.getElementById('connectionInfo').style.display = 'none';
             document.getElementById('sharerInfo').style.display = 'none';
             
-            backToRole();
             showMessage('🔌 Compartición detenida', 'success');
             console.log('Compartición detenida');
         }
