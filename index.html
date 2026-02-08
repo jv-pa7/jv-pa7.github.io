@@ -368,6 +368,7 @@
         let roomRef = null;
         let iceCandidatesRef = null;
         let remoteIceCandidatesRef = null;
+        let statsIntervalRef = null;
 
         const configuration = {
             iceServers: [
@@ -469,6 +470,10 @@
                                     if (remoteIceCandidatesRef) {
                                         remoteIceCandidatesRef.off('child_added');
                                         remoteIceCandidatesRef = null;
+                                    }
+                                    if (statsIntervalRef) {
+                                        clearInterval(statsIntervalRef);
+                                        statsIntervalRef = null;
                                     }
                 } else {
                     localStorage.removeItem(`webrtc_room_${currentRoomId}`);
@@ -730,8 +735,38 @@
 
                 viewerPeerConnection.addEventListener('track', (event) => {
                     console.log('Track remoto recibido:', event.track.kind);
-                    remoteStream.addTrack(event.track);
-                    console.log('✅ Track añadido al stream remoto — tipo:', event.track.kind, 'videoTracks:', remoteStream.getVideoTracks().length, 'audioTracks:', remoteStream.getAudioTracks().length);
+                    const track = event.track;
+                    remoteStream.addTrack(track);
+                    console.log('✅ Track añadido al stream remoto — tipo:', track.kind, 'videoTracks:', remoteStream.getVideoTracks().length, 'audioTracks:', remoteStream.getAudioTracks().length);
+
+                    // Eventos del track para diagnóstico
+                    track.onunmute = () => console.log('track.onunmute:', track.kind);
+                    track.onmute = () => console.log('track.onmute:', track.kind);
+                    track.onended = () => console.log('track.onended:', track.kind);
+
+                    // Forzar play y re-asignar srcObject para asegurar render
+                    try {
+                        remoteVideo.srcObject = remoteStream;
+                        remoteVideo.play().catch(err => console.warn('play() falló:', err));
+                    } catch (e) {
+                        console.warn('Error forzando play/re-assign:', e);
+                    }
+
+                    // Iniciar polling de stats para ver bytesReceived
+                    if (viewerPeerConnection && !statsIntervalRef) {
+                        statsIntervalRef = setInterval(async () => {
+                            try {
+                                const stats = await viewerPeerConnection.getStats();
+                                stats.forEach(report => {
+                                    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                                        console.log('STATS inbound-rtp video:', {bytesReceived: report.bytesReceived, packetsLost: report.packetsLost, framesDecoded: report.framesDecoded});
+                                    }
+                                });
+                            } catch (err) {
+                                console.warn('Error reading stats:', err);
+                            }
+                        }, 1000);
+                    }
                     // Intentar reproducir el video cuando llegue el primer track
                     try {
                         if (remoteVideo.paused) {
