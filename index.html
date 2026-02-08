@@ -744,9 +744,40 @@
                 // Establecer oferta remota
                 await viewerPeerConnection.setRemoteDescription(new RTCSessionDescription(remoteOffer));
 
+                // Asegurar que estamos en el estado correcto antes de crear la answer
+                if (viewerPeerConnection.signalingState !== 'have-remote-offer') {
+                    await new Promise((resolve) => {
+                        const onState = () => {
+                            if (viewerPeerConnection.signalingState === 'have-remote-offer') {
+                                viewerPeerConnection.removeEventListener('signalingstatechange', onState);
+                                resolve();
+                            }
+                        };
+                        viewerPeerConnection.addEventListener('signalingstatechange', onState);
+                        // pequeña salvaguarda: resolver tras 2s aunque no cambie (evita bloqueo)
+                        setTimeout(() => {
+                            viewerPeerConnection.removeEventListener('signalingstatechange', onState);
+                            resolve();
+                        }, 2000);
+                    });
+                }
+
                 // Crear respuesta
                 const answer = await viewerPeerConnection.createAnswer();
-                await viewerPeerConnection.setLocalDescription(answer);
+                // Intentar setLocalDescription con reintento si el estado no es el esperado
+                try {
+                    await viewerPeerConnection.setLocalDescription(answer);
+                } catch (err) {
+                    console.warn('setLocalDescription falló primero, reintentando:', err);
+                    // Si falla por estado, esperar un momento y reintentar
+                    await new Promise(r => setTimeout(r, 200));
+                    try {
+                        await viewerPeerConnection.setLocalDescription(answer);
+                    } catch (err2) {
+                        console.error('setLocalDescription sigue fallando:', err2);
+                        throw err2;
+                    }
+                }
 
                 // Escuchar ICE candidates del compartidor
                 if (db && !iceCandidatesRef) {
