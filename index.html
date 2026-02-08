@@ -214,6 +214,12 @@
     <div class="container">
         <h1>🖥️ Escritorio Remoto - WebRTC</h1>
         
+        <div id="firebaseWarning" class="info" style="margin-bottom: 20px; display: none;">
+            <strong>⚙️ Configuración necesaria:</strong> Se está usando modo local (sin Firebase). 
+            <a href="https://github.com/jv-pa7/jv-pa7.github.io#configurar-firebase" style="color: #667eea; text-decoration: underline;">Ver instrucciones</a> 
+            para habilitar acceso multidispositivo.
+        </div>
+        
         <div id="roleSelection" class="section">
             <h2>¿Qué quieres hacer?</h2>
             <div class="input-group">
@@ -277,6 +283,32 @@
     </div>
 
     <script>
+        // 🔄 CONFIGURAR TU PROYECTO FIREBASE
+        // 1. Ve a https://console.firebase.google.com/
+        // 2. Crea un nuevo proyecto
+        // 3. Habilita Realtime Database
+        // 4. Reemplaza la configuración de abajo
+        
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "your-project.firebaseapp.com",
+            databaseURL: "https://your-project.firebaseio.com",
+            projectId: "your-project",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Inicializar Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            var db = firebase.database();
+            console.log('✅ Firebase iniciado correctamente');
+        } catch (error) {
+            console.warn('⚠️ Firebase no configurado. Usando modo local.');
+            var db = null;
+        }
+
         let localStream = null;
         let sharerPeerConnection = null;
         let viewerPeerConnection = null;
@@ -284,6 +316,7 @@
         let isAudioEnabled = true;
         let isVideoEnabled = true;
         let currentRole = null;
+        let roomRef = null;
 
         const configuration = {
             iceServers: [
@@ -401,15 +434,26 @@
 
                 currentRoomId = generateRoomId();
                 
-                // Guardar datos de la sala en localStorage
+                // Guardar datos en Firebase o localStorage
                 const roomData = {
                     roomId: currentRoomId,
                     sharerName: userName,
                     offer: sharerPeerConnection.localDescription,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    status: 'waiting'
                 };
-                localStorage.setItem(`webrtc_room_${currentRoomId}`, JSON.stringify(roomData));
-                localStorage.setItem('webrtc_current_sharer', JSON.stringify(roomData));
+
+                if (db) {
+                    // Usar Firebase
+                    roomRef = db.ref(`rooms/${currentRoomId}`);
+                    await roomRef.set(roomData).catch(err => {
+                        console.warn('Firebase error, using localStorage:', err);
+                        localStorage.setItem(`webrtc_room_${currentRoomId}`, JSON.stringify(roomData));
+                    });
+                } else {
+                    // Usar localStorage como fallback
+                    localStorage.setItem(`webrtc_room_${currentRoomId}`, JSON.stringify(roomData));
+                }
                 
                 document.getElementById('currentRoomId').textContent = currentRoomId;
                 document.getElementById('connectionInfo').style.display = 'block';
@@ -440,25 +484,42 @@
 
         // Escuchar respuesta del espectador
         function listenForViewerResponse(roomId) {
-            const checkInterval = setInterval(() => {
-                const roomData = localStorage.getItem(`webrtc_room_${roomId}`);
-                if (roomData) {
-                    const data = JSON.parse(roomData);
-                    if (data.answer && sharerPeerConnection) {
-                        clearInterval(checkInterval);
+            if (db && roomRef) {
+                // Usar Firebase
+                roomRef.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data && data.answer && sharerPeerConnection) {
                         try {
                             sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                             showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
-                            console.log('Espectador conectado');
+                            console.log('Espectador conectado vía Firebase');
+                            roomRef.off('value'); // Dejar de escuchar
                         } catch (error) {
                             console.error('Error al establecer respuesta:', error);
                         }
                     }
-                }
-            }, 500);
+                });
+            } else {
+                // Fallback con localStorage
+                const checkInterval = setInterval(() => {
+                    const roomData = localStorage.getItem(`webrtc_room_${roomId}`);
+                    if (roomData) {
+                        const data = JSON.parse(roomData);
+                        if (data.answer && sharerPeerConnection) {
+                            clearInterval(checkInterval);
+                            try {
+                                sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                                showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
+                                console.log('Espectador conectado vía localStorage');
+                            } catch (error) {
+                                console.error('Error al establecer respuesta:', error);
+                            }
+                        }
+                    }
+                }, 500);
 
-            // Limpiar después de 5 minutos
-            setTimeout(() => clearInterval(checkInterval), 300000);
+                setTimeout(() => clearInterval(checkInterval), 300000);
+            }
         }
 
         // Conectar como espectador
@@ -477,14 +538,28 @@
                     return;
                 }
 
-                // Obtener datos de la sala
-                const roomDataStr = localStorage.getItem(`webrtc_room_${roomId}`);
-                if (!roomDataStr) {
+                // Obtener datos de la sala desde Firebase o localStorage
+                let roomData = null;
+
+                if (db) {
+                    // Intentar obtener desde Firebase
+                    const snapshot = await db.ref(`rooms/${roomId}`).get();
+                    if (snapshot.exists()) {
+                        roomData = snapshot.val();
+                    }
+                } else {
+                    // Fallback a localStorage
+                    const localData = localStorage.getItem(`webrtc_room_${roomId}`);
+                    if (localData) {
+                        roomData = JSON.parse(localData);
+                    }
+                }
+
+                if (!roomData) {
                     showMessage(`❌ No se encontró la sala: ${roomId}`, 'error');
                     return;
                 }
 
-                const roomData = JSON.parse(roomDataStr);
                 const remoteOffer = roomData.offer;
 
                 // Mostrar nombre del compartidor
@@ -519,9 +594,21 @@
                 const answer = await viewerPeerConnection.createAnswer();
                 await viewerPeerConnection.setLocalDescription(answer);
 
-                // Guardar respuesta en localStorage
+                // Guardar respuesta en Firebase o localStorage
                 roomData.answer = viewerPeerConnection.localDescription;
-                localStorage.setItem(`webrtc_room_${roomId}`, JSON.stringify(roomData));
+                roomData.viewerName = viewerName;
+                roomData.status = 'connected';
+
+                if (db) {
+                    // Usar Firebase
+                    await db.ref(`rooms/${roomId}`).update(roomData).catch(err => {
+                        console.warn('Firebase error, using localStorage:', err);
+                        localStorage.setItem(`webrtc_room_${roomId}`, JSON.stringify(roomData));
+                    });
+                } else {
+                    // Usar localStorage
+                    localStorage.setItem(`webrtc_room_${roomId}`, JSON.stringify(roomData));
+                }
                 
                 currentRoomId = roomId;
                 showMessage('✅ ¡Conectado! Recibiendo transmisión...', 'success');
@@ -569,9 +656,18 @@
                 localStream = null;
             }
             
-            // Limpiar localStorage
+            // Limpiar en Firebase o localStorage
             if (currentRoomId) {
-                localStorage.removeItem(`webrtc_room_${currentRoomId}`);
+                if (db && roomRef) {
+                    db.ref(`rooms/${currentRoomId}`).remove().catch(err => {
+                        console.warn('Error limpiando Firebase:', err);
+                        localStorage.removeItem(`webrtc_room_${currentRoomId}`);
+                    });
+                    roomRef.off('value');
+                    roomRef = null;
+                } else {
+                    localStorage.removeItem(`webrtc_room_${currentRoomId}`);
+                }
             }
             
             document.getElementById('shareBtn').textContent = 'Compartir pantalla';
@@ -609,8 +705,14 @@
             showMessage('⚠️ La compartición de pantalla no está disponible', 'error');
         }
 
-        console.log('Aplicación de escritorio remoto iniciada');
+        // Mostrar advertencia si Firebase no está configurado
+        if (!db) {
+            document.getElementById('firebaseWarning').style.display = 'block';
+        }
+
+        console.log('✅ Aplicación de escritorio remoto iniciada');
         console.log('Modo:', isMobile ? 'Móvil' : 'Escritorio');
+        console.log('BD:', db ? 'Firebase' : 'localStorage (local)');
     </script>
 </body>
 </html>
