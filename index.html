@@ -581,6 +581,21 @@
                 // Escuchar respuestas del espectador
                 listenForViewerResponse(currentRoomId);
                 
+                // IMPORTANTE: Iniciar listener de ICE candidates AHORA, antes de que lleguen
+                if (db && !remoteIceCandidatesRef) {
+                    console.log('🎧 Iniciando listener de ICE candidates del espectador...');
+                    remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
+                    remoteIceCandidatesRef.on('child_added', (snapshot) => {
+                        const candidate = snapshot.val();
+                        if (candidate && sharerPeerConnection) {
+                            sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                console.warn('⚠️ Error adding viewer ICE candidate:', err);
+                            });
+                            console.log('✅ 📥 ICE candidate del espectador agregado');
+                        }
+                    });
+                }
+                
                 console.log('Compartiendo en sala:', currentRoomId);
                 
             } catch (error) {
@@ -614,6 +629,7 @@
                             
                             // Iniciar polling de stats en el compartidor
                             if (!statsIntervalRef) {
+                                console.log('🚀 Iniciando polling de stats del compartidor...');
                                 statsIntervalRef = setInterval(async () => {
                                     try {
                                         const stats = await sharerPeerConnection.getStats();
@@ -623,24 +639,12 @@
                                             }
                                         });
                                     } catch (err) {
-                                        console.warn('Error reading sharer stats:', err);
+                                        console.error('❌ Error reading sharer stats:', err);
                                     }
                                 }, 2000);
+                            } else {
+                                console.log('⚠️ Polling stats ya activo en compartidor');
                             }
-                            
-                                                    // Escuchar ICE candidates del espectador
-                                                    if (!remoteIceCandidatesRef) {
-                                                        remoteIceCandidatesRef = db.ref(`rooms/${roomId}/viewerCandidates`);
-                                                        remoteIceCandidatesRef.on('child_added', (snapshot) => {
-                                                            const candidate = snapshot.val();
-                                                            if (candidate && sharerPeerConnection) {
-                                                                sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
-                                                                    console.warn('Error adding ICE candidate:', err);
-                                                                });
-                                                                console.log('📥 ICE candidate del espectador agregado');
-                                                            }
-                                                        });
-                                                    }
                         } catch (error) {
                             console.error('Error al establecer respuesta:', error);
                         }
@@ -772,27 +776,28 @@
 
                     // Iniciar polling de stats para diagnosticar flujo de datos
                     if (viewerPeerConnection && !statsIntervalRef) {
+                        console.log('🚀 Iniciando polling de stats del espectador...');
                         statsIntervalRef = setInterval(async () => {
                             try {
                                 const stats = await viewerPeerConnection.getStats();
-                                let reportTypes = {};
+                                let hasVideo = false;
                                 stats.forEach(report => {
-                                    reportTypes[report.type] = (reportTypes[report.type] || 0) + 1;
                                     if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                                        hasVideo = true;
                                         console.log('✅ STATS inbound-rtp video:', {bytesReceived: report.bytesReceived, packetsLost: report.packetsLost, framesDecoded: report.framesDecoded});
                                     } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
                                         console.log('✅ STATS candidate-pair succeeded:', {currentRoundTripTime: report.currentRoundTripTime, availableOutgoingBitrate: report.availableOutgoingBitrate});
-                                    } else if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-                                        console.log('✅ STATS inbound-rtp audio:', {bytesReceived: report.bytesReceived});
                                     }
                                 });
-                                if (Object.keys(reportTypes).length > 0) {
-                                    console.log('📊 Tipos de report:', reportTypes);
+                                if (!hasVideo) {
+                                    console.log('⚠️ No inbound-rtp video report yet, total reports:', stats.size);
                                 }
                             } catch (err) {
-                                console.warn('Error reading stats:', err);
+                                console.error('❌ Error reading stats:', err);
                             }
                         }, 2000);
+                    } else {
+                        console.log('⚠️ statsIntervalRef ya está activo o viewerPeerConnection es null');
                     }
                     // Intentar reproducir el video cuando llegue el primer track
                     try {
@@ -815,6 +820,21 @@
                         db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate);
                     }
                 });
+
+                // IMPORTANTE: Iniciar listener de ICE candidates del compartidor ANTES de cualquier cosa
+                if (db && !iceCandidatesRef) {
+                    console.log('🎧 Iniciando listener de ICE candidates del compartidor...');
+                    iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
+                    iceCandidatesRef.on('child_added', (snapshot) => {
+                        const candidate = snapshot.val();
+                        if (candidate && viewerPeerConnection) {
+                            viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                console.warn('⚠️ Error adding sharer ICE candidate:', err);
+                            });
+                            console.log('✅ 📥 ICE candidate del compartidor agregado');
+                        }
+                    });
+                }
 
                 // Establecer oferta remota
                 await viewerPeerConnection.setRemoteDescription(new RTCSessionDescription(remoteOffer));
@@ -852,20 +872,6 @@
                         console.error('setLocalDescription sigue fallando:', err2);
                         throw err2;
                     }
-                }
-
-                // Escuchar ICE candidates del compartidor
-                if (db && !iceCandidatesRef) {
-                    iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
-                    iceCandidatesRef.on('child_added', (snapshot) => {
-                        const candidate = snapshot.val();
-                        if (candidate && viewerPeerConnection) {
-                            viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
-                                console.warn('Error adding ICE candidate:', err);
-                            });
-                            console.log('📥 ICE candidate del compartidor agregado');
-                        }
-                    });
                 }
 
                 // Guardar respuesta en Firebase o localStorage
