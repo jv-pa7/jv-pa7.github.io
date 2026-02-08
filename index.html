@@ -673,18 +673,20 @@
                 // Crear peer connection para espectador
                 viewerPeerConnection = new RTCPeerConnection(configuration);
                 
+                // Crear MediaStream ANTES de recibir tracks
+                const remoteStream = new MediaStream();
+                const remoteVideo = document.getElementById('remoteVideo');
+                remoteVideo.srcObject = remoteStream;
+                console.log('📹 MediaStream remoto creado');
+                
                 viewerPeerConnection.addEventListener('signalingstatechange', () => {
                     console.log('[ESPECTADOR] signalingState:', viewerPeerConnection.signalingState);
                 });
 
                 viewerPeerConnection.addEventListener('track', (event) => {
                     console.log('Track remoto recibido:', event.track.kind);
-                    const remoteVideo = document.getElementById('remoteVideo');
-                    if (remoteVideo.srcObject) {
-                        remoteVideo.srcObject.addTrack(event.track);
-                    } else {
-                        remoteVideo.srcObject = new MediaStream([event.track]);
-                    }
+                    remoteStream.addTrack(event.track);
+                    console.log('✅ Track añadido al stream remoto');
                 });
 
                 viewerPeerConnection.addEventListener('connectionstatechange', () => {
