@@ -513,6 +513,10 @@
                 document.getElementById('localVideoContainer').style.display = 'block';
                 console.log('📹 Video local capturado:', {videoTracks: localStream.getVideoTracks().length, audioTracks: localStream.getAudioTracks().length});
 
+                // ⭐ GENERAR ROOM ID ANTES DE TODO
+                currentRoomId = generateRoomId();
+                console.log('⭐ Room ID generado ANTES de peer connection:', currentRoomId);
+
                 // Crear peer connection para compartidor
                 sharerPeerConnection = new RTCPeerConnection(configuration);
                 
@@ -529,6 +533,28 @@
                     sharerPeerConnection.addTrack(track, localStream);
                 });
 
+                // ⭐ PRE-INICIALIZAR LISTENER DE ICE CANDIDATES DEL ESPECTADOR ANTES DE CREAR OFERTA
+                console.log('🔍 PRE-inicializando listener del espectador... db:', !!db, 'roomId:', currentRoomId);
+                if (db && !remoteIceCandidatesRef) {
+                    console.log('🎧 PRE-registrando listener para candidates del espectador');
+                    remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
+                    remoteIceCandidatesRef.on('child_added', (snapshot) => {
+                        const candidate = snapshot.val();
+                        console.log('📥 PRE-listener disparado, candidate:', !!candidate, 'conn:', !!sharerPeerConnection);
+                        if (candidate && sharerPeerConnection) {
+                            console.log('📥 Agregando ICE candidate del espectador:', candidate.candidate?.substring(0, 50));
+                            sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                console.warn('⚠️ Error adding viewer ICE candidate:', err);
+                            });
+                            console.log('✅ 📥 ICE candidate del espectador AGREGADO');
+                        } else {
+                            console.warn('⚠️ Candidate o conn inválidos:', {hasCandidate: !!candidate, hasConn: !!sharerPeerConnection});
+                        }
+                    });
+                } else {
+                    console.warn('❌ No se pudo pre-registrar:', {db: !!db, ref: !!remoteIceCandidatesRef});
+                }
+
                 // Manejador de ICE candidates del compartidor
                 sharerPeerConnection.addEventListener('icecandidate', (event) => {
                     if (event.candidate && currentRoomId && db) {
@@ -540,8 +566,6 @@
                 // Crear oferta
                 const offer = await sharerPeerConnection.createOffer();
                 await sharerPeerConnection.setLocalDescription(offer);
-
-                currentRoomId = generateRoomId();
                 
                 // Guardar datos en Firebase o localStorage
                 const roomData = {
@@ -580,28 +604,6 @@
 
                 // Escuchar respuestas del espectador
                 listenForViewerResponse(currentRoomId);
-                
-                // IMPORTANTE: Iniciar listener de ICE candidates AHORA, antes de que lleguen
-                console.log('🔍 Iniciando setup de listeners ICE... db:', !!db, 'remoteIceCandidatesRef:', !!remoteIceCandidatesRef);
-                if (db && !remoteIceCandidatesRef) {
-                    console.log('🎧 Iniciando listener de ICE candidates del espectador en sala:', currentRoomId);
-                    remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
-                    remoteIceCandidatesRef.on('child_added', (snapshot) => {
-                        const candidate = snapshot.val();
-                        if (candidate && sharerPeerConnection) {
-                            console.log('📥 Agregando ICE candidate del espectador:', candidate.candidate?.substring(0, 50));
-                            sharerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
-                                console.warn('⚠️ Error adding viewer ICE candidate:', err);
-                            });
-                            console.log('✅ 📥 ICE candidate del espectador AGREGADO');
-                        } else {
-                            console.warn('⚠️ Candidate inválido o sin sharerPeerConnection:', !!candidate, !!sharerPeerConnection);
-                        }
-                    });
-                } else {
-                    if (!db) console.warn('❌ db es NULL');
-                    if (remoteIceCandidatesRef) console.warn('❌ remoteIceCandidatesRef ya está activo');
-                }
                 
                 console.log('Compartiendo en sala:', currentRoomId);
                 
@@ -738,6 +740,28 @@
 
                 // Crear peer connection para espectador
                 viewerPeerConnection = new RTCPeerConnection(configuration);
+
+                // ⭐ PRE-INICIALIZAR LISTENER DE ICE CANDIDATES DEL COMPARTIDOR INMEDIATAMENTE
+                console.log('🔍 PRE-inicializando listener del compartidor en espectador... db:', !!db, 'iceCandidatesRef:', !!iceCandidatesRef);
+                if (db && !iceCandidatesRef) {
+                    console.log('🎧 PRE-registrando listener para candidates del compartidor sala:', roomId);
+                    iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
+                    iceCandidatesRef.on('child_added', (snapshot) => {
+                        const candidate = snapshot.val();
+                        console.log('📥 PRE-listener disparado, candidate:', !!candidate, 'conn:', !!viewerPeerConnection);
+                        if (candidate && viewerPeerConnection) {
+                            console.log('📥 Agregando ICE candidate del compartidor:', candidate.candidate?.substring(0, 50));
+                            viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
+                                console.warn('⚠️ Error adding sharer ICE candidate:', err);
+                            });
+                            console.log('✅ 📥 ICE candidate del compartidor AGREGADO');
+                        } else {
+                            console.warn('⚠️ Candidate o conn inválidos:', {hasCandidate: !!candidate, hasConn: !!viewerPeerConnection});
+                        }
+                    });
+                } else {
+                    console.warn('❌ No se pudo PRE-registrar:', {db: !!db, ref: !!iceCandidatesRef});
+                }
                 
                 // Crear MediaStream ANTES de recibir tracks
                 const remoteStream = new MediaStream();
@@ -830,28 +854,6 @@
                         db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate);
                     }
                 });
-
-                // IMPORTANTE: Iniciar listener de ICE candidates del compartidor ANTES de cualquier cosa
-                console.log('🔍 Iniciando setup de listeners ICE del espectador... db:', !!db, 'iceCandidatesRef:', !!iceCandidatesRef);
-                if (db && !iceCandidatesRef) {
-                    console.log('🎧 Iniciando listener de ICE candidates del compartidor en sala:', roomId);
-                    iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
-                    iceCandidatesRef.on('child_added', (snapshot) => {
-                        const candidate = snapshot.val();
-                        if (candidate && viewerPeerConnection) {
-                            console.log('📥 Agregando ICE candidate del compartidor:', candidate.candidate?.substring(0, 50));
-                            viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
-                                console.warn('⚠️ Error adding sharer ICE candidate:', err);
-                            });
-                            console.log('✅ 📥 ICE candidate del compartidor AGREGADO');
-                        } else {
-                            console.warn('⚠️ Candidate inválido o sin viewerPeerConnection:', !!candidate, !!viewerPeerConnection);
-                        }
-                    });
-                } else {
-                    if (!db) console.warn('❌ db es NULL en espectador');
-                    if (iceCandidatesRef) console.warn('❌ iceCandidatesRef ya está activo');
-                }
 
                 // Establecer oferta remota
                 await viewerPeerConnection.setRemoteDescription(new RTCSessionDescription(remoteOffer));
