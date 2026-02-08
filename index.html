@@ -626,8 +626,8 @@
                 let roomData = null;
 
                 if (db) {
-                    // Intentar obtener desde Firebase
-                    const snapshot = await db.ref(`rooms/${roomId}`).get();
+                    // Intentar obtener desde Firebase (usando once para Firebase 8.x)
+                    const snapshot = await db.ref(`rooms/${roomId}`).once('value');
                     if (snapshot.exists()) {
                         roomData = snapshot.val();
                     }
@@ -685,9 +685,14 @@
 
                 if (db) {
                     // Usar Firebase
-                    await db.ref(`rooms/${roomId}`).update(roomData).catch(err => {
-                        console.warn('Firebase error, using localStorage:', err);
-                        localStorage.setItem(`webrtc_room_${roomId}`, JSON.stringify(roomData));
+                    await new Promise((resolve, reject) => {
+                        db.ref(`rooms/${roomId}`).update(roomData, (error) => {
+                            if (error) {
+                                console.warn('Firebase error, using localStorage:', error);
+                                localStorage.setItem(`webrtc_room_${roomId}`, JSON.stringify(roomData));
+                            }
+                            resolve();
+                        });
                     });
                 } else {
                     // Usar localStorage
