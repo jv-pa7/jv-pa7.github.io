@@ -744,7 +744,10 @@
                                 console.warn('Answer inválida:', data.answer);
                                 return;
                             }
-                            sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                            // IMPORTANTE: Usar await para establecer remote description
+                            console.log('[COMPARTIDOR] Estableciendo remote description...');
+                            await sharerPeerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                            console.log('[COMPARTIDOR] Remote description establecida correctamente');
                             showMessage('✅ ¡Espectador conectado! Video transmitiendo...', 'success');
                             console.log('✅ [COMPARTIDOR] Answer recibida del espectador, transmitiendo...');
                             roomRef.off('value'); // Dejar de escuchar
