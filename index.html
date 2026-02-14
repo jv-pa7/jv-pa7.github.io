@@ -766,7 +766,14 @@
                                                 hasCandidate = true;
                                             }
                                         });
-                                        if (!hasCandidate) {\n                                            console.log('⚠️ [COMPARTIDOR] Sin candidate-pair. ICEState:', sharerPeerConnection.iceConnectionState);\n                                        }\n                                    } catch (err) {\n                                        console.error('❌ Stats error:', err);\n                                    }\n                                }, 2000);\n                            }
+                                        if (!hasCandidate) {
+                                            console.log('⚠️ [COMPARTIDOR] Sin candidate-pair. ICEState:', sharerPeerConnection.iceConnectionState);
+                                        }
+                                    } catch (err) {
+                                        console.error('❌ Stats error:', err);
+                                    }
+                                }, 2000);
+                            }
                         } catch (error) {
                             console.error('Error al establecer respuesta:', error);
                         }
@@ -874,7 +881,14 @@
                                     viewerPeerConnection.addIceCandidate(rtcCand)
                                         .then(() => console.log('✅ Candidate existente agregado'))
                                         .catch(err => console.error('❌ Error adding existing candidate:', err.name, err.message));
-                                }\n                            });\n                        } else {\n                            console.log('✨ Sin candidates existentes del compartidor');\n                        }\n                    }, (error) => {\n                        console.error('❌ Error .once sharerCandidates:', error.code);\n                    });
+                                }
+                            });
+                        } else {
+                            console.log('✨ Sin candidates existentes del compartidor');
+                        }
+                    }, (error) => {
+                        console.error('❌ Error .once sharerCandidates:', error.code);
+                    });
                     
                     // Ahora escuchar NUEVOS candidates
                     console.log('🎧 Registrando .on(child_added) para sharerCandidates...');
@@ -971,7 +985,16 @@
                                         console.log('✅ STATS candidate-pair succeeded');
                                     } else if (report.type === 'remote-candidate') {
                                         hasRemoteCandidate = true;
-                                    }\n                                });\n                                if (!hasCandidate) {\n                                    const logInfo = `Sin candidate-pair. Stats: ${JSON.stringify(reportSummary)}. Remote:%c ${hasRemoteCandidate}`;\n                                    if (statsLogCount++ < 5) {\n                                        console.log(logInfo, 'color:red');\n                                    }\n                                }\n                            } catch (err) {\n                                console.error('❌ Error stats:', err);
+                                    }
+                                });
+                                if (!hasCandidate) {
+                                    const logInfo = `Sin candidate-pair. Stats: ${JSON.stringify(reportSummary)}. Remote:%c ${hasRemoteCandidate}`;
+                                    if (statsLogCount++ < 5) {
+                                        console.log(logInfo, 'color:red');
+                                    }
+                                }
+                            } catch (err) {
+                                console.error('❌ Error stats:', err);
                             }
                         }, 2000);
                     } else {
