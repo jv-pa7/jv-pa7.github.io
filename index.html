@@ -732,10 +732,10 @@
         }
 
         // Escuchar respuesta del espectador
-        function listenForViewerResponse(roomId) {
+        async function listenForViewerResponse(roomId) {
             if (db && roomRef) {
                 // Usar Firebase
-                roomRef.on('value', (snapshot) => {
+                roomRef.on('value', async (snapshot) => {
                     const data = snapshot.val();
                     if (data && data.answer && sharerPeerConnection) {
                         try {
