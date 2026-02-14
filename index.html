@@ -606,6 +606,9 @@
                     remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
                     // toString() gives full path/url; `path` is undefined in 8.x SDK
                     console.log('✅ Referencia creada:', remoteIceCandidatesRef.toString());
+
+                    // Añadir handler que busca candidates EXISTENTES al registrarse
+                    remoteIceCandidatesRef.once('value', (snapshot) => {
                         console.log('✅ .once(value) completado para viewerCandidates');
                         if (snapshot.exists()) {
                             console.log('🔄 Buscando candidates EXISTENTES del espectador...');
