@@ -170,6 +170,18 @@ Abre **Console (F12)** y busca:
 ⚠️ Sin candidate-pair o ICE stuck en "new": la red entre pares no permite
     conexión directa. Añade un servidor TURN o prueba con ambos equipos
     en la misma LAN.
+
+    **Opcional:** el HTML define tres constantes configurables para especificar
+    un relay TURN y sus credenciales:
+    ```js
+    const TURN_URL = '';   // ej. 'turn:mi.turn.server:3478'
+    const TURN_USER = '';  // usuario
+    const TURN_PASS = '';  // credencial/secret
+    ```
+    Si dejas `TURN_URL` vacío no se añadirá ningún servidor, y si la URL
+    usa el esquema `turn:`/`turns:` debes rellenar usuario y contraseña.
+    El error `Both username and credential are required` indica que el URL
+    TURN fue proporcionado sin autenticación.
 ```
 
 ## 📊 Monitoreo de Rendimiento

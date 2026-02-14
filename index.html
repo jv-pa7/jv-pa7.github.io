@@ -400,16 +400,28 @@
         let remoteIceCandidatesRef = null;
         let statsIntervalRef = null;
 
+        // --------- CONFIGURABLE ICE SERVERS ---------
+        // Puede rellenarse desde un archivo de configuración si lo deseas
+        const TURN_URL = '';        // e.g. 'turn:mi.turn.server:3478'
+        const TURN_USER = '';       // nombre de usuario TURN (obligatorio si URL empieza por turn/turns)
+        const TURN_PASS = '';       // contraseña/secret
+
+        const iceServers = [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ];
+
+        if (TURN_URL) {
+            const turn = { urls: TURN_URL };
+            if (TURN_URL.startsWith('turn') && TURN_USER && TURN_PASS) {
+                turn.username = TURN_USER;
+                turn.credential = TURN_PASS;
+            }
+            iceServers.push(turn);
+        }
+
         const configuration = {
-            // STUN servers help peers discover public addresses. For NAT/traversal
-            // in restrictive networks you'll need a TURN relay (often paid).
-            // Below is a sample public TURN service; replace with your own for
-            // production reliability.
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'turn:relay.backups.mux.com:443?transport=tcp' }
-            ],
+            iceServers,
             sdpSemantics: 'unified-plan'
         };
 
@@ -577,7 +589,14 @@
                 console.log('⭐ Room ID generado ANTES de peer connection:', currentRoomId);
 
                 // Crear peer connection para compartidor
-                sharerPeerConnection = new RTCPeerConnection(configuration);
+                try {
+                    sharerPeerConnection = new RTCPeerConnection(configuration);
+                } catch (err) {
+                    console.error('⚠️ Error construyendo RTCPeerConnection:', err);
+                    showMessage('❌ No se pudo inicializar la conexión WebRTC. ' +
+                        'Revisa la configuración de TURN (usuario/credencial).', 'error');
+                    throw err;
+                }
                 
                 sharerPeerConnection.addEventListener('signalingstatechange', () => {
                     console.log('[COMPARTIDOR] signalingState:', sharerPeerConnection.signalingState);
