@@ -250,6 +250,89 @@ El app reporta stats cada 2 segundos:
 - [Firebase Realtime Database](https://firebase.google.com/docs/database)
 - [Firebase Rules Documentation](https://firebase.google.com/docs/database/security)
 
+## 🧱 Configurar tu propio servidor TURN
+
+Para una red fiable entre pares debes tener un relay TURN; aquí hay
+un ejemplo mínimo usando coturn (open source) que puedes ejecutar en un
+servidor VPS o contenedor.
+
+### 1. Instalación (Linux/Debian/Ubuntu)
+```bash
+sudo apt update && sudo apt install coturn -y
+# habilita el servicio si quieres que arranque automáticamente
+sudo systemctl enable coturn
+```
+
+### 2. Configuración básica
+Edita `/etc/turnserver.conf` y añade lo siguiente (ajusta según tu IP):
+```
+# escucha en puerto 3478 TCP/UDP
+listening-port=3478
+# usa credenciales de largo plazo
+lt-cred-mech
+# secreto compartido para generar usuarios HMAC-SHA1
+use-auth-secret
+static-auth-secret=clave-secreta-aqui
+realm=midominio.com   # cambia por tu dominio o IP pública
+
+# direcciones de relay (opcional si la IP externa es fija)
+external-ip=1.2.3.4
+# relay-ip=0.0.0.0
+
+# logging
+verbose
+
+# permite consultas de TURN && STUN
+fingerprint
+
+# limita a IPv4 si necesitas
+
+# usuario estático de ejemplo (si no usas static-auth-secret)
+# user=usuario:contraseña
+```
+Reinicia el servicio:
+```bash
+sudo systemctl restart coturn
+```
+
+### 3. Probar el servidor
+Con `turnutils_uclient` incluido en coturn:
+```bash
+turnutils_uclient -u usuario -w contraseña -t 127.0.0.1
+```
+si ves `Success` entonces funciona.
+
+### 4. Usar en tu aplicación
+Rellena las constantes del HTML:
+```js
+const TURN_URL = 'turn:midominio.com:3478';
+const TURN_USER = 'usuario';
+const TURN_PASS = 'contraseña';
+```
+O si usas `static-auth-secret`, genera un par temporal en tu backend:
+```js
+// Node.js
+const hmac = require('crypto').createHmac('sha1', secret);
+hmac.update(`${username}:${realm}:${password}`);
+const credential = hmac.digest('base64');
+```
+
+### 5. Alternativa con Docker
+```bash
+docker run -d --name coturn \
+  -p 3478:3478 -p 3478:3478/udp \
+  -v /ruta/turnserver.conf:/etc/coturn/turnserver.conf \
+  coturn/coturn
+```
+
+### 6. Consejos y seguridad
+* Protege el puerto con firewall (solo TCP/UDP 3478)…
+* Si tu IP cambia, actualiza `external-ip` o usa DNS dinámico.
+* Para producción considera usar `--min-port`/`--max-port` para rango de
+  relay y ajusta `max-session`.
+
+---
+
 ## 📄 Licencia
 
 MIT License
