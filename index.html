@@ -102,8 +102,19 @@
 
         video {
             max-width: 100%;
+            height: auto;
+            display: block;
             border-radius: 8px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            background: #000;
+        }
+        
+        @media (max-width: 768px) {
+            video {
+                width: 100%;
+                max-height: 70vh;
+                object-fit: contain;
+            }
         }
 
         .status {
@@ -387,7 +398,8 @@
             video: {
                 width: { ideal: 480 },
                 height: { ideal: 320 },
-                frameRate: { ideal: 15, max: 30 }
+                frameRate: { ideal: 15, max: 30 },
+                facingMode: 'user'
             },
             audio: {
                 echoCancellation: true,
@@ -496,11 +508,34 @@
 
                 // Obtener stream
                 if (isMobile) {
-                    localStream = await navigator.mediaDevices.getUserMedia({
-                        video: mobileConfig.video,
-                        audio: mobileConfig.audio
-                    });
-                    showMessage('📱 Compartiendo cámara en móvil', 'success');
+                    try {
+                        console.log('📱 [MÓVIL] Intentando getUserMedia...');
+                        localStream = await navigator.mediaDevices.getUserMedia({
+                            video: mobileConfig.video,
+                            audio: false  // Desactivar audio en móvil para evitar problemas
+                        });
+                        console.log('📱 [MÓVIL] getUserMedia exitoso - tracks:', {
+                            video: localStream.getVideoTracks().length,
+                            audio: localStream.getAudioTracks().length
+                        });
+                        // Verificar que el track está activo
+                        const videoTrack = localStream.getVideoTracks()[0];
+                        if (videoTrack) {
+                            console.log('📱 [MÓVIL] Video track estado:', {
+                                enabled: videoTrack.enabled,
+                                readyState: videoTrack.readyState,
+                                settings: videoTrack.getSettings()
+                            });
+                            if (videoTrack.readyState !== 'live') {
+                                console.warn('⚠️ [MÓVIL] Track no está en estado "live"');
+                            }
+                        }
+                        showMessage('📱 Compartiendo cámara en móvil', 'success');
+                    } catch (err) {
+                        console.error('❌ [MÓVIL] Error getUserMedia:', err.name, err.message);
+                        showMessage(`❌ Error en cámara: ${err.message}`, 'error');
+                        throw err;
+                    }
                 } else {
                     showMessage('🖥️ Selecciona la pantalla a compartir y haz clic en "Compartir"', 'info');
                     localStream = await navigator.mediaDevices.getDisplayMedia({ 
@@ -532,8 +567,15 @@
                 });
                 
                 localStream.getTracks().forEach((track, idx) => {
-                    console.log(`[COMPARTIDOR] Agregando track ${idx}:`, track.kind, 'enabled:', track.enabled);
-                    sharerPeerConnection.addTrack(track, localStream);
+                    console.log(`[COMPARTIDOR] Agregando track ${idx}:`, track.kind, 'enabled:', track.enabled, 'state:', track.readyState);
+                    
+                    // ⭐ CORRECCIÓN: Pasar array vacío o no pasar el segundo parámetro
+                    const sender = sharerPeerConnection.addTrack(track);
+                    console.log(`[COMPARTIDOR] Track ${idx} agregado al transceiver:`, {
+                        mid: sender?.mid,
+                        track: sender?.track?.kind,
+                        trackState: sender?.track?.readyState
+                    });
                 });
 
                 // ⭐ PRE-INICIALIZAR LISTENER DE ICE CANDIDATES DEL ESPECTADOR ANTES DE CREAR OFERTA
@@ -609,9 +651,15 @@
                     }
                 });
 
-                // Crear oferta
-                const offer = await sharerPeerConnection.createOffer();
+                // Crear oferta CON configuración explícita
+                console.log('[COMPARTIDOR] Creando oferta...');
+                const offer = await sharerPeerConnection.createOffer({
+                    offerToReceiveAudio: false,
+                    offerToReceiveVideo: true
+                });
+                console.log('[COMPARTIDOR] Oferta creada, estableciendo descripción local...');
                 await sharerPeerConnection.setLocalDescription(offer);
+                console.log('[COMPARTIDOR] Descripción local establecida');
                 
                 // Guardar datos en Firebase o localStorage
                 const roomData = {
@@ -860,22 +908,34 @@
                 });
 
                 viewerPeerConnection.addEventListener('track', (event) => {
-                    console.log('Track remoto recibido:', event.track.kind);
+                    console.log('[ESPECTADOR] Track REMOTO RECIBIDO:', event.track.kind, 'state:', event.track.readyState);
                     const track = event.track;
-                    remoteStream.addTrack(track);
-                    console.log('✅ Track añadido al stream remoto — tipo:', track.kind, 'videoTracks:', remoteStream.getVideoTracks().length, 'audioTracks:', remoteStream.getAudioTracks().length);
+                    
+                    // IMPORTANTE: Usar streams que vienen con el evento
+                    if (event.streams && event.streams.length > 0) {
+                        console.log('[ESPECTADOR] Usando stream del evento');
+                        remoteStream = event.streams[0];
+                    } else {
+                        console.log('[ESPECTADOR] Agregando track a MediaStream');
+                        remoteStream.addTrack(track);
+                    }
+                    
+                    remoteVideo.srcObject = remoteStream;
+                    console.log('Stream remoto actualizado:', {
+                        videoTracks: remoteStream.getVideoTracks().length,
+                        audioTracks: remoteStream.getAudioTracks().length
+                    });
 
                     // Eventos del track para diagnóstico
                     track.onunmute = () => console.log('track.onunmute:', track.kind);
                     track.onmute = () => console.log('track.onmute:', track.kind);
                     track.onended = () => console.log('track.onended:', track.kind);
 
-                    // Forzar play y re-asignar srcObject para asegurar render
+                    // Intentar reproducir
                     try {
-                        remoteVideo.srcObject = remoteStream;
                         remoteVideo.play().catch(err => console.warn('play() falló:', err));
                     } catch (e) {
-                        console.warn('Error forzando play/re-assign:', e);
+                        console.warn('Error al reproducir:', e);
                     }
 
                     // Iniciar polling de stats para diagnosticar flujo de datos
