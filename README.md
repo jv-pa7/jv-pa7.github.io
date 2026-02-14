@@ -167,6 +167,9 @@ Abre **Console (F12)** y busca:
 ❌ Error en .on(child_added): → Firebase issue
 ⚠️ Sin inbound-rtp video → ICE candidates no llegan
 ✅ STATS outbound-rtp video: {bytesSent: 0} → No hay conexión de medios
+⚠️ Sin candidate-pair o ICE stuck en "new": la red entre pares no permite
+    conexión directa. Añade un servidor TURN o prueba con ambos equipos
+    en la misma LAN.
 ```
 
 ## 📊 Monitoreo de Rendimiento

@@ -401,9 +401,14 @@
         let statsIntervalRef = null;
 
         const configuration = {
+            // STUN servers help peers discover public addresses. For NAT/traversal
+            // in restrictive networks you'll need a TURN relay (often paid).
+            // Below is a sample public TURN service; replace with your own for
+            // production reliability.
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'turn:relay.backups.mux.com:443?transport=tcp' }
             ],
             sdpSemantics: 'unified-plan'
         };
@@ -599,10 +604,8 @@
                 if (db && !remoteIceCandidatesRef) {
                     console.log('🎧 PRE-registrando listener para candidates del espectador');
                     remoteIceCandidatesRef = db.ref(`rooms/${currentRoomId}/viewerCandidates`);
-                    console.log('✅ Referencia creada:', remoteIceCandidatesRef.path);
-                    
-                    // Buscar candidates EXISTENTES al registrarse
-                    remoteIceCandidatesRef.once('value', (snapshot) => {
+                    // toString() gives full path/url; `path` is undefined in 8.x SDK
+                    console.log('✅ Referencia creada:', remoteIceCandidatesRef.toString());
                         console.log('✅ .once(value) completado para viewerCandidates');
                         if (snapshot.exists()) {
                             console.log('🔄 Buscando candidates EXISTENTES del espectador...');
@@ -771,6 +774,11 @@
                                         });
                                         if (!hasCandidate) {
                                             console.log('⚠️ [COMPARTIDOR] Sin candidate-pair. ICEState:', sharerPeerConnection.iceConnectionState);
+                                            // notify user once if ICE seems stuck
+                                            if (!window._warnedNoPair) {
+                                                showMessage('⚠️ ICE no encuentra conexión. Comprueba la red o añade un servidor TURN.', 'error');
+                                                window._warnedNoPair = true;
+                                            }
                                         }
                                     } catch (err) {
                                         console.error('❌ Stats error:', err);
@@ -869,7 +877,7 @@
                 if (db && !iceCandidatesRef) {
                     console.log('🎧 PRE-registrando listener para candidates del compartidor sala:', roomId);
                     iceCandidatesRef = db.ref(`rooms/${roomId}/sharerCandidates`);
-                    console.log('✅ Referencia creada:', iceCandidatesRef.path);
+                    console.log('✅ Referencia creada:', iceCandidatesRef.toString());
                     
                     // Añadir handler que busca candidates EXISTENTES al registrarse
                     iceCandidatesRef.once('value', (snapshot) => {
@@ -994,6 +1002,10 @@
                                     const logInfo = `Sin candidate-pair. Stats: ${JSON.stringify(reportSummary)}. Remote:%c ${hasRemoteCandidate}`;
                                     if (statsLogCount++ < 5) {
                                         console.log(logInfo, 'color:red');
+                                    }
+                                    if (!window._warnedNoPairViewer) {
+                                        showMessage('⚠️ ICE no encuentra conexión. Comprueba la red o añade un servidor TURN.', 'error');
+                                        window._warnedNoPairViewer = true;
                                     }
                                 }
                             } catch (err) {
