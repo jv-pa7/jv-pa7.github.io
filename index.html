@@ -77,16 +77,32 @@
             border-radius: 8px;
             font-size: 14px;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         button:hover {
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.15);
         }
 
         button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
+            transform: none;
         }
 
         .video-container {
@@ -1135,6 +1151,18 @@
         console.log('✅ Aplicación de escritorio remoto iniciada');
         console.log('Modo:', isMobile ? 'Móvil' : 'Escritorio');
         console.log('BD: Esperando inicialización de Firebase...');
+        
+        // Mejorar experiencia en móvil
+        if (isMobile) {
+            console.log('📱 Aplicando mejoras para móvil...');
+            // Agregar feedback visual en botones para móvil
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('button');
+                if (btn) {
+                    console.log('📱 Button click:', btn.textContent.trim().substring(0,20));
+                }
+            }, true);
+        }
     </script>
 </body>
 </html>
