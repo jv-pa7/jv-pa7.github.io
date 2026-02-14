@@ -629,26 +629,29 @@
 
                 // Manejador de ICE candidates del compartidor
                 sharerPeerConnection.addEventListener('icecandidate', (event) => {
-                    if (event.candidate && currentRoomId && db) {
+                    if (event.candidate) {
                         const candStr = event.candidate.candidate.substring(0, 50);
-                        console.log('📤 Enviando ICE candidate del compartidor:', candStr);
-                        db.ref(`rooms/${currentRoomId}/sharerCandidates`).push(event.candidate)
-                            .then(() => {
-                                console.log('✅ ✓ GUARDADO en Firebase sharerCandidates:', candStr);
-                            })
-                            .catch(err => {
-                                console.error('❌ ERROR guardando candidate compartidor:', err);
-                                // Fallback a localStorage
-                                try {
-                                    const candidates = JSON.parse(localStorage.getItem(`webrtc_cands_${currentRoomId}_sharer`) || '[]');
-                                    candidates.push(event.candidate);
-                                    localStorage.setItem(`webrtc_cands_${currentRoomId}_sharer`, JSON.stringify(candidates));
-                                    console.log('💾 Guardado en localStorage como fallback');
-                                } catch (e) {
-                                    console.error('❌ ERROR guardar fallback:', e);
-                                }
-                            });
+                        console.log('📤 [COMPARTIDOR] ICE candidate:', candStr, 'priority:', event.candidate.priority);
+                        if (currentRoomId && db) {
+                            db.ref(`rooms/${currentRoomId}/sharerCandidates`).push(event.candidate)
+                                .then(() => {
+                                    console.log('✅ [COMPARTIDOR] Firebase sharerCandidates OK');
+                                })
+                                .catch(err => {
+                                    console.error('❌ [COMPARTIDOR] Firebase error:', err.message);
+                                });
+                        }
+                    } else {
+                        console.log('🏁 [COMPARTIDOR] Fin de candidates');
                     }
+                });
+                
+                sharerPeerConnection.addEventListener('iceconnectionstatechange', () => {
+                    console.log('[COMPARTIDOR] iceConnectionState:', sharerPeerConnection.iceConnectionState);
+                });
+                
+                sharerPeerConnection.addEventListener('icegatheringstatechange', () => {
+                    console.log('[COMPARTIDOR] iceGatheringState:', sharerPeerConnection.iceGatheringState);
                 });
 
                 // Crear oferta CON configuración explícita
@@ -736,18 +739,18 @@
                                 statsIntervalRef = setInterval(async () => {
                                     try {
                                         const stats = await sharerPeerConnection.getStats();
+                                        let hasOutbound = false, hasCandidate = false;
+                                        const reportSummary = {};
                                         stats.forEach(report => {
+                                            reportSummary[report.type] = (reportSummary[report.type] || 0) + 1;
                                             if (report.type === 'outbound-rtp' && report.kind === 'video') {
-                                                console.log('✅ STATS SHARER outbound-rtp video:', {bytesSent: report.bytesSent, framesSent: report.framesSent});
+                                                hasOutbound = true;
+                                                console.log('📊 SHARER video:', {sent: report.bytesSent, frames: report.framesSent});
+                                            } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                                                hasCandidate = true;
                                             }
                                         });
-                                    } catch (err) {
-                                        console.error('❌ Error reading sharer stats:', err);
-                                    }
-                                }, 2000);
-                            } else {
-                                console.log('⚠️ Polling stats ya activo en compartidor');
-                            }
+                                        if (!hasCandidate) {\n                                            console.log('⚠️ [COMPARTIDOR] Sin candidate-pair. ICEState:', sharerPeerConnection.iceConnectionState);\n                                        }\n                                    } catch (err) {\n                                        console.error('❌ Stats error:', err);\n                                    }\n                                }, 2000);\n                            }
                         } catch (error) {
                             console.error('Error al establecer respuesta:', error);
                         }
@@ -846,22 +849,16 @@
                     iceCandidatesRef.once('value', (snapshot) => {
                         console.log('✅ .once(value) completado para sharerCandidates');
                         if (snapshot.exists()) {
-                            console.log('🔄 Buscando candidates EXISTENTES del compartidor...');
+                            const existingCount = Object.keys(snapshot.val()).length;
+                            console.log(`📊 ${existingCount} candidates existentes del compartidor`);
                             snapshot.forEach((childSnapshot) => {
                                 const candidate = childSnapshot.val();
                                 if (candidate && viewerPeerConnection) {
-                                    console.log('📥 Agregando candidate EXISTENTE del compartidor:', candidate.candidate?.substring(0, 50));
-                                    viewerPeerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => {
-                                        console.warn('⚠️ Error adding existing sharer candidate:', err);
-                                    });
-                                }
-                            });
-                        } else {
-                            console.log('✨ No hay candidates existentes todavía en compartidor');
-                        }
-                    }, (error) => {
-                        console.error('❌ Error en .once(value) sharerCandidates:', error.code, error.message);
-                    });
+                                    const rtcCand = new RTCIceCandidate(candidate);
+                                    viewerPeerConnection.addIceCandidate(rtcCand)
+                                        .then(() => console.log('✅ Candidate existente agregado'))
+                                        .catch(err => console.error('❌ Error adding existing candidate:', err.name, err.message));
+                                }\n                            });\n                        } else {\n                            console.log('✨ Sin candidates existentes del compartidor');\n                        }\n                    }, (error) => {\n                        console.error('❌ Error .once sharerCandidates:', error.code);\n                    });
                     
                     // Ahora escuchar NUEVOS candidates
                     console.log('🎧 Registrando .on(child_added) para sharerCandidates...');
@@ -941,26 +938,24 @@
                     // Iniciar polling de stats para diagnosticar flujo de datos
                     if (viewerPeerConnection && !statsIntervalRef) {
                         console.log('🚀 Iniciando polling de stats del espectador...');
+                        let statsLogCount = 0;
                         statsIntervalRef = setInterval(async () => {
                             try {
                                 const stats = await viewerPeerConnection.getStats();
-                                let hasVideo = false, hasCandidate = false;
+                                let hasVideo = false, hasCandidate = false, hasRemoteCandidate = false;
                                 const reportSummary = {};
+                                const detailedReports = {};
                                 stats.forEach(report => {
                                     reportSummary[report.type] = (reportSummary[report.type] || 0) + 1;
                                     if (report.type === 'inbound-rtp' && report.kind === 'video') {
                                         hasVideo = true;
-                                        console.log('✅ STATS inbound-rtp video:', {bytesReceived: report.bytesReceived, packetsLost: report.packetsLost, framesDecoded: report.framesDecoded});
+                                        console.log('✅ STATS inbound-rtp video:', {bytesReceived: report.bytesReceived, framesDecoded: report.framesDecoded});
                                     } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
                                         hasCandidate = true;
-                                        console.log('✅ STATS candidate-pair succeeded:', {currentRoundTripTime: report.currentRoundTripTime});
-                                    }
-                                });
-                                if (!hasVideo && !hasCandidate) {
-                                    console.log('⚠️ Sin inbound-rtp video, Sin candidate-pair succeeded. Reports:', reportSummary);
-                                }
-                            } catch (err) {
-                                console.error('❌ Error reading stats:', err);
+                                        console.log('✅ STATS candidate-pair succeeded');
+                                    } else if (report.type === 'remote-candidate') {
+                                        hasRemoteCandidate = true;
+                                    }\n                                });\n                                if (!hasCandidate) {\n                                    const logInfo = `Sin candidate-pair. Stats: ${JSON.stringify(reportSummary)}. Remote:%c ${hasRemoteCandidate}`;\n                                    if (statsLogCount++ < 5) {\n                                        console.log(logInfo, 'color:red');\n                                    }\n                                }\n                            } catch (err) {\n                                console.error('❌ Error stats:', err);
                             }
                         }, 2000);
                     } else {
@@ -982,25 +977,29 @@
 
                 // Manejador de ICE candidates del espectador
                 viewerPeerConnection.addEventListener('icecandidate', (event) => {
-                    if (event.candidate && roomId && db) {
+                    if (event.candidate) {
                         const candStr = event.candidate.candidate.substring(0, 50);
                         console.log('📤 Enviando ICE candidate del espectador:', candStr);
-                        db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate)
-                            .then(() => {
-                                console.log('✅ ✓ GUARDADO en Firebase viewerCandidates:', candStr);
-                            })
-                            .catch(err => {
-                                console.error('❌ ERROR guardando candidate espectador:', err);
-                                // Fallback a localStorage
-                                try {
-                                    const candidates = JSON.parse(localStorage.getItem(`webrtc_cands_${roomId}_viewer`) || '[]');
-                                    candidates.push(event.candidate);
-                                    localStorage.setItem(`webrtc_cands_${roomId}_viewer`, JSON.stringify(candidates));
-                                    console.log('💾 Guardado en localStorage como fallback');
-                                } catch (e) {
-                                    console.error('❌ ERROR guardar fallback:', e);
-                                }
-                            });
+                        if (roomId && db) {
+                            db.ref(`rooms/${roomId}/viewerCandidates`).push(event.candidate)
+                                .then(() => {
+                                    console.log('✅ GUARDADO en Firebase viewerCandidates:', candStr);
+                                })
+                                .catch(err => {
+                                    console.error('❌ ERROR Firebase viewerCandidates:', err.message);
+                                    // Fallback localStorage
+                                    try {
+                                        const candidates = JSON.parse(localStorage.getItem(`webrtc_cands_${roomId}_viewer`) || '[]');
+                                        candidates.push(event.candidate);
+                                        localStorage.setItem(`webrtc_cands_${roomId}_viewer`, JSON.stringify(candidates));
+                                        console.log('💾 Fallback: localStorage viewerCandidates');
+                                    } catch (e) {
+                                        console.error('❌ Error localStorage:', e);
+                                    }
+                                });
+                        }
+                    } else {
+                        console.log('🏁 [ESPECTADOR] Fin de candidates (null)')
                     }
                 });
 
